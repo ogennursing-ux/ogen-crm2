@@ -70,6 +70,9 @@ a{color:var(--sea-500);text-decoration:none}
 .keypad button:active{transform:scale(.95)}
 .keypad button.ghost{background:none;border:none;font-size:15px;font-weight:500;color:rgba(255,255,255,.55)}
 .lock-msg{min-height:20px;margin-top:20px;font-size:13.5px;color:var(--sand)}
+#pinInput:focus{outline:none;border-color:var(--sand)!important;background:rgba(255,255,255,.1)!important}
+#pinInput.shake{animation:shake .4s}
+#pinGo:active{transform:scale(.98)}
 
 /* ---------- App shell ---------- */
 #app{display:flex;height:100%}
@@ -391,8 +394,10 @@ table.tbl tr:hover td{background:var(--mist)}
     </div>
     <h1>עוגן CRM</h1>
     <p>מערכת ההשמה — הזינו קוד גישה</p>
-    <div class="pin-dots" id="pinDots"><i></i><i></i><i></i><i></i></div>
-    <div class="keypad" id="keypad"></div>
+    <input id="pinInput" type="password" autocomplete="off" placeholder="קוד גישה"
+      style="width:100%;height:54px;border-radius:14px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);color:#fff;text-align:center;font-size:19px;letter-spacing:2px;padding:0 16px;margin-bottom:14px">
+    <button id="pinGo"
+      style="width:100%;height:50px;border-radius:14px;background:var(--sand);color:var(--sea-950);font-weight:800;font-size:16px">כניסה</button>
     <div class="lock-msg" id="lockMsg"></div>
   </div>
 </div>
@@ -420,7 +425,7 @@ table.tbl tr:hover td{background:var(--mist)}
       </button>
       <div id="syncDot" class="chip" style="cursor:default"></div>
       <div class="who">
-        <div class="meta"><b id="whoName">דנה לוי</b><span>רכזת השמה</span></div>
+        <div class="meta"><b id="whoName">דביר בנגי</b><span id="whoRole">מנהל השמה</span></div>
         <div class="avatar" id="whoAva">ד</div>
       </div>
     </header>
@@ -524,7 +529,7 @@ function load(){
   try{const raw=localStorage.getItem(LS_KEY); if(raw){db=JSON.parse(raw);}}
   catch(e){console.warn("load failed",e);}
   for(const c of ["leads","workers","matches","staff","templates"]) if(!Array.isArray(db[c])) db[c]=[];
-  if(!db.staff.length) db.staff=[{id:"u1",name:"דנה לוי",role:"רכזת"},{id:"u2",name:"יוסי כהן",role:"רכז"},{id:"u3",name:"מרים אבוקסיס",role:"רכזת בכירה"}];
+  if(!db.staff.length) db.staff=[{id:"u1",name:"דביר בנגי",role:"מנהל השמה"},{id:"u2",name:"יוסי כהן",role:"רכז"},{id:"u3",name:"מרים אבוקסיס",role:"רכזת בכירה"}];
   purgeOldDeleted(); // auto-clean recycle bin after 30 days (spec א7)
   sanitizeDb(db);
 }
@@ -538,26 +543,28 @@ function save(){ // localStorage immediate + (debounced cloud would go here)
 const alive = c => db[c].filter(x=>!x._deleted);
 const leadById = id => db.leads.find(l=>l.id===id);
 const workerById = id => db.workers.find(w=>w.id===id);
+const me=()=>localStorage.getItem("ogenUser")||(db.staff[0]&&db.staff[0].name)||"דביר בנגי"; // current placement manager
+const firstName=n=>String(n||"").trim().split(/\s+/)[0];
 
 /* ---------- seed demo data ---------- */
 function seed(){
   if(db.leads.length||db.workers.length) return;
-  const L=(o)=>Object.assign({id:uid("lead"),date:now(),status:"חדש",assignedTo:"דנה לוי",source:"המלצה",sourceDetail:"",
+  const L=(o)=>Object.assign({id:uid("lead"),date:now(),status:"חדש",assignedTo:"דביר בנגי",source:"המלצה",sourceDetail:"",
     patientName:"",patientLastName:"",patientAge:"",gender:"",maritalStatus:"",livingSituation:"",height:"",weight:"",
     city:"",street:"",area:"1",needsHoist:"",needsDiapers:"",hasDementia:"",needsWheelchair:"",hasPermit:"",offeredSalary:"",
     requirements:"",contactName:"",contactRelation:"",contactPhone:"",followUpDate:"",temperature:"warm",starred:false,
     tags:[],notes:"",lostToCompetitor:false,competitorName:"",lostReason:"",activities:[],proposedWorkerIds:[],
-    lastEditedBy:"דנה לוי",lastEditedAt:now(),_deleted:false},o);
+    lastEditedBy:"דביר בנגי",lastEditedAt:now(),_deleted:false},o);
   const W=(o)=>Object.assign({id:uid("wrk"),dateAdded:now(),status:"זמין",source:"ראיון",name:"",lastName:"",nationality:"",
     gender:"",age:"",birthDate:"",maritalStatus:"",phone:"",city:"",street:"",languages:"",experience:"",expectedSalary:"",
     canHoist:"",canDiapers:"",knowsDementia:"",notes:"",tags:[],starred:false,activities:[],_deleted:false,interview:null},o);
-  const act=(t,who="דנה לוי")=>({id:uid("a"),text:t,by:who,at:new Date(Date.now()-Math.random()*12*864e5).toISOString()});
+  const act=(t,who="דביר בנגי")=>({id:uid("a"),text:t,by:who,at:new Date(Date.now()-Math.random()*12*864e5).toISOString()});
 
   db.leads=[
     L({patientName:"רבקה",patientLastName:"גולדשטיין",patientAge:84,gender:"female",city:"תל אביב",area:"1",
       needsHoist:"yes",needsDiapers:"yes",hasDementia:"yes",hasPermit:"yes",offeredSalary:6000,requirements:"עברית, ניסיון דמנציה",
       contactName:"מיכל גולדשטיין",contactRelation:"בת",contactPhone:"052-4471203",temperature:"hot",status:"בטיפול",
-      assignedTo:"דנה לוי",source:"המלצה",starred:true,tags:["דחוף","דמנציה"],followUpDate:new Date(Date.now()+864e5).toISOString(),
+      assignedTo:"דביר בנגי",source:"המלצה",starred:true,tags:["דחוף","דמנציה"],followUpDate:new Date(Date.now()+864e5).toISOString(),
       activities:[act("שיחת פתיחה — המשפחה מעוניינת במטפלת דוברת עברית"),act("נשלחו 2 פרופילים בוואטסאפ")]}),
     L({patientName:"אברהם",patientLastName:"מזרחי",patientAge:78,gender:"male",city:"חיפה",area:"2",
       needsHoist:"no",needsDiapers:"no",hasDementia:"no",hasPermit:"yes",offeredSalary:5500,requirements:"גבר, ליווי החוצה",
@@ -566,7 +573,7 @@ function seed(){
     L({patientName:"שרה",patientLastName:"פרידמן",patientAge:91,gender:"female",city:"ירושלים",area:"1",
       needsHoist:"yes",needsDiapers:"yes",hasDementia:"no",hasPermit:"yes",offeredSalary:6500,requirements:"מנוף, לינה",
       contactName:"רות לוי",contactRelation:"נכדה",contactPhone:"050-3312845",temperature:"hot",status:"הוצע עובד",
-      assignedTo:"דנה לוי",source:"גוגל",starred:true,tags:["מנוף"],
+      assignedTo:"דביר בנגי",source:"גוגל",starred:true,tags:["מנוף"],
       activities:[act("הוצעו 3 מועמדות"),act("המשפחה אהבה את המועמדת הראשונה — ממתינים לראיון")]}),
     L({patientName:"יעקב",patientLastName:"בן דוד",patientAge:73,gender:"male",city:"באר שבע",area:"3",
       needsHoist:"no",needsDiapers:"yes",hasDementia:"yes",hasPermit:"no",offeredSalary:5200,requirements:"סבלנות, בישול",
@@ -576,7 +583,7 @@ function seed(){
     L({patientName:"אסתר",patientLastName:"כץ",patientAge:88,gender:"female",city:"רמת גן",area:"1",
       needsHoist:"no",needsDiapers:"no",hasDementia:"yes",hasPermit:"yes",offeredSalary:5800,requirements:"עברית/רוסית",
       contactName:"בוריס כץ",contactRelation:"בן",contactPhone:"053-4455667",temperature:"warm",status:"סגור-הצלחה",
-      assignedTo:"דנה לוי",source:"המלצה",tags:["הושמה"],
+      assignedTo:"דביר בנגי",source:"המלצה",tags:["הושמה"],
       activities:[act("הושמה בהצלחה — המטפלת התחילה לעבוד"),act("חוזה נחתם")]}),
     L({patientName:"משה",patientLastName:"אזולאי",patientAge:80,gender:"male",city:"נתניה",area:"1",
       needsHoist:"no",needsDiapers:"no",hasDementia:"no",hasPermit:"yes",offeredSalary:5000,requirements:"",
@@ -761,7 +768,7 @@ function renderDash(v){
 
   v.innerHTML=`
   <div style="margin-bottom:20px">
-    <h1 style="font-size:23px">${greet}, דנה 👋</h1>
+    <h1 style="font-size:23px">${greet}, ${esc(firstName(me()))} 👋</h1>
     <p style="color:var(--ink-3);font-size:14px;margin-top:3px">${new Date().toLocaleDateString("he-IL",{weekday:"long",day:"numeric",month:"long"})}</p>
   </div>
   <div class="kpis">
@@ -943,12 +950,12 @@ function openLead(id){
     // star toggle inside form
   }
 }
-function newLead(){return{id:uid("lead"),date:now(),status:"חדש",assignedTo:"דנה לוי",source:"המלצה",sourceDetail:"",
+function newLead(){return{id:uid("lead"),date:now(),status:"חדש",assignedTo:me(),source:"המלצה",sourceDetail:"",
   patientName:"",patientLastName:"",patientAge:"",gender:"",maritalStatus:"",livingSituation:"",height:"",weight:"",
   city:"",street:"",area:"1",needsHoist:"",needsDiapers:"",hasDementia:"",needsWheelchair:"",hasPermit:"",offeredSalary:"",
   requirements:"",contactName:"",contactRelation:"",contactPhone:"",followUpDate:"",temperature:"warm",starred:false,
   tags:[],notes:"",lostToCompetitor:false,competitorName:"",lostReason:"",activities:[],proposedWorkerIds:[],
-  lastEditedBy:"דנה לוי",lastEditedAt:now(),_deleted:false};}
+  lastEditedBy:me(),lastEditedAt:now(),_deleted:false};}
 const yn=(name,val)=>`<select name="${name}"><option value="" ${val===""?"selected":""}>—</option>
   <option value="yes" ${val==="yes"?"selected":""}>כן</option><option value="no" ${val==="no"?"selected":""}>לא</option></select>`;
 function leadForm(l){
@@ -1260,6 +1267,7 @@ function proposeWorker(leadId,workerId){
    ============================================================ */
 function renderInterviews(v){
   const link=location.origin+location.pathname+"?mode=interview";
+  const familyLink=new URL("family/",location.href).href;
   const fromInterview=alive("workers").filter(w=>w.interview);
   v.innerHTML=`
   <div class="dash-grid">
@@ -1292,8 +1300,28 @@ function renderInterviews(v){
           </div>`).join(""):`<div class="empty" style="padding:30px">${svg(I.chat,40)}<h3>עדיין אין ראיונות</h3><p>שתפ/י את הקישור כדי להתחיל</p></div>`}
       </div>
     </div>
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="hd">${svg(I.match,18)}<h3>אפליקציית משפחה — חיבור בקליק</h3></div>
+    <div class="bd" style="padding:20px">
+      <p style="color:var(--ink-2);font-size:14px;line-height:1.7;margin-bottom:18px">
+        שלח/י למשפחה את הקישור ל"חיבור בקליק": הן ממלאות שאלון קצר, מחליקות בין המטפלים המתאימים
+        (בסגנון טינדר עם אחוז התאמה ונימוקים), ומסמנות מי שמעניין אותן. הבחירות חוזרות אליך כליד אוטומטי.</p>
+      <div class="qrbox">
+        <div class="qr" id="familyQr"></div>
+        <div style="flex:1;min-width:200px">
+          <div class="section-label" style="margin-top:0">הקישור למשפחה</div>
+          <div class="linkbox">
+            <input id="famLink" value="${esc(familyLink)}" readonly>
+            <button class="btn" onclick="navigator.clipboard.writeText($('#famLink').value);toast('הקישור הועתק','ok')">העתק</button>
+          </div>
+          <a class="btn primary" href="${esc(familyLink)}" target="_blank" style="margin-top:12px;width:100%;justify-content:center">${svg(I.match,16)}פתח/י את חיבור בקליק</a>
+        </div>
+      </div>
+    </div>
   </div>`;
   drawQR($("#qrBox"),link);
+  drawQR($("#familyQr"),familyLink);
 }
 function openInterviewPreview(){ window.open(location.pathname+"?mode=interview","_blank"); }
 
@@ -1394,7 +1422,7 @@ function renderReports(v){
    SETTINGS
    ============================================================ */
 function renderSettings(v){
-  const pin=localStorage.getItem("ogenPIN")||"315136614";
+  const pin=localStorage.getItem("ogenPIN")||"2002דביר";
   const gkey=localStorage.getItem("geminiApiKey")||"";
   const gkey2=localStorage.getItem("geminiApiKey2")||"";
   const syncedOn=syncEnabled();
@@ -1404,9 +1432,28 @@ function renderSettings(v){
     <div class="panel" style="margin-bottom:16px">
       <div class="hd">${svg(I.pin,18)}<h3>אבטחה</h3></div>
       <div class="bd" style="padding:18px">
-        <div class="field"><label>קוד גישה (4–12 ספרות)</label>
-          <input id="setPin" value="${esc(pin)}" maxlength="12" inputmode="numeric" style="max-width:220px;letter-spacing:4px;font-size:18px"></div>
-        <p style="font-size:12.5px;color:var(--ink-3)">נעילה אוטומטית לאחר 5 ניסיונות כושלים. הנתונים נשמרים מוצפנים מקומית (localStorage) ומסונכרנים לענן.</p>
+        <div class="field"><label>קוד גישה (אותיות/ספרות)</label>
+          <input id="setPin" value="${esc(pin)}" maxlength="40" style="max-width:260px;font-size:16px"></div>
+        <p style="font-size:12.5px;color:var(--ink-3)">נעילה אוטומטית לאחר 5 ניסיונות כושלים. הנתונים נשמרים מקומית (localStorage) + סנכרון ענן אופציונלי.</p>
+      </div>
+    </div>
+    <div class="panel" style="margin-bottom:16px">
+      <div class="hd">${svg(I.workers,18)}<h3>מנהלי השמה</h3></div>
+      <div class="bd" style="padding:14px 16px">
+        <div class="field" style="margin-bottom:12px"><label>המנהל/ת המחובר/ת כעת</label>
+          <select id="setMe" style="max-width:260px">${db.staff.map(u=>`<option ${me()===u.name?"selected":""}>${esc(u.name)}</option>`).join("")}</select></div>
+        <div style="display:flex;flex-direction:column;gap:2px;margin-bottom:12px">
+          ${db.staff.map(u=>`<div class="urg" style="cursor:default">
+            <div class="ic" style="background:${avaColor(u.name)}22;color:${avaColor(u.name)}">${esc(u.name[0]||"?")}</div>
+            <div class="tx"><b>${esc(u.name)}</b><span>${esc(u.role||"רכז/ת")}</span></div>
+            <button class="btn sm danger" onclick="removeStaff('${u.id}')">הסר</button>
+          </div>`).join("")}
+        </div>
+        <div class="addact">
+          <input id="newStaffName" placeholder="שם מנהל/ת השמה">
+          <input id="newStaffRole" placeholder="תפקיד" style="max-width:130px">
+          <button class="btn primary" onclick="addStaff()">${svg(I.plus,15)}הוסף</button>
+        </div>
       </div>
     </div>
     <div class="panel" style="margin-bottom:16px">
@@ -1469,7 +1516,8 @@ function renderSettings(v){
       </div>
     </div>
   </div>`;
-  $("#setPin").onchange=e=>{const p=e.target.value.replace(/\D/g,"").slice(0,12);if(p.length>=4){localStorage.setItem("ogenPIN",p);toast("קוד עודכן","ok");}else toast("נדרשות לפחות 4 ספרות","err");};
+  $("#setPin").onchange=e=>{const p=e.target.value.trim().slice(0,40);if(p.length>=4){localStorage.setItem("ogenPIN",p);toast("קוד עודכן","ok");}else toast("נדרשים לפחות 4 תווים","err");};
+  $("#setMe").onchange=e=>{localStorage.setItem("ogenUser",e.target.value);$("#whoName").textContent=e.target.value;$("#whoAva").textContent=e.target.value[0]||"?";const su=db.staff.find(s=>s.name===e.target.value);if(su&&$("#whoRole"))$("#whoRole").textContent=su.role||"מנהל השמה";toast("מחובר/ת כ-"+e.target.value,"ok");};
   $("#setGemini").onchange=e=>{localStorage.setItem("geminiApiKey",e.target.value.trim());toast("מפתח ראשי נשמר","ok");};
   $("#setGemini2").onchange=e=>{localStorage.setItem("geminiApiKey2",e.target.value.trim());toast("מפתח גיבוי נשמר","ok");};
   $("#setSync").onchange=e=>{toggleSync(e.target.checked);toast(e.target.checked?"סנכרון הופעל":"סנכרון כובה","ok");};
@@ -1482,7 +1530,7 @@ function renderSettings(v){
 /* ============================================================
    SHARED: activity, modal, star, delete, search, export
    ============================================================ */
-function logActivity(item,text,who="דנה לוי"){
+function logActivity(item,text,who=me()){
   item.activities=item.activities||[];
   item.activities.push({id:uid("a"),text:clean(text,300),by:who,at:now()});
   if(item.activities.length>200)item.activities=item.activities.slice(-200); // capActivities
@@ -1510,7 +1558,7 @@ function delItem(type,id){
   const it=type==="lead"?leadById(id):workerById(id);
   it._deleted=true;it._deletedAt=now();save();closeModal();toast("הועבר לסל המיחזור","ok");renderNav();render();
 }
-function stamp(item){item.lastEditedBy="דנה לוי";item.lastEditedAt=now();}
+function stamp(item){item.lastEditedBy=me();item.lastEditedAt=now();}
 
 /* ---------- Hebrew smart search (spec א8) ---------- */
 function smartSearchLeads(ls,q){
@@ -1574,6 +1622,18 @@ function dl(blob,name){const u=URL.createObjectURL(blob);const a=document.create
 function wipeAll(){if(confirm("לאפס את כל הנתונים? פעולה בלתי-הפיכה."))
   {localStorage.removeItem(LS_KEY);db={leads:[],workers:[],matches:[],staff:[],templates:[]};load();save();toast("המערכת אופסה","ok");render();renderNav();}}
 function reseed(){db={leads:[],workers:[],matches:[],staff:[],templates:[]};load();seed();toast("נתוני דמו נטענו","ok");render();renderNav();}
+function addStaff(){
+  const name=clean($("#newStaffName").value,60), role=clean($("#newStaffRole").value,40)||"רכז/ת";
+  if(!name){toast("הזן/י שם","err");return;}
+  if(db.staff.some(s=>s.name===name)){toast("שם כבר קיים","err");return;}
+  db.staff.push({id:uid("u"),name,role}); save(); toast("נוסף: "+name,"ok"); render();
+}
+function removeStaff(id){
+  if(db.staff.length<=1){toast("חייב להישאר מנהל אחד לפחות","err");return;}
+  const u=db.staff.find(x=>x.id===id); db.staff=db.staff.filter(x=>x.id!==id);
+  if(u&&me()===u.name){localStorage.setItem("ogenUser",db.staff[0].name);}
+  save(); toast("הוסר","ok"); render(); renderNav();
+}
 
 /* ---------- modal engine ---------- */
 let modalCfg=null;
@@ -1907,40 +1967,23 @@ function callerId(){
 /* ============================================================
    LOCK SCREEN
    ============================================================ */
-let pinBuf="",attempts=0,locked=false;
-const PIN_MAX=12, PIN_DEFAULT="315136614";
+let attempts=0,locked=false;
+const PIN_DEFAULT="2002דביר";
 function initLock(){
-  const keys=["1","2","3","4","5","6","7","8","9","ok","0","⌫"];
-  $("#keypad").innerHTML=keys.map(k=>
-    k==="⌫"?`<button class="ghost" data-k="del">⌫</button>`
-    :k==="ok"?`<button data-k="ok" style="background:rgba(233,180,76,.18);color:var(--sand);font-size:25px" title="כניסה">✓</button>`
-    :`<button data-k="${k}">${k}</button>`).join("");
-  $$("#keypad [data-k]").forEach(b=>b.onclick=()=>pinPress(b.dataset.k));
-  document.addEventListener("keydown",lockKey);
-  updateDots();
-}
-function lockKey(e){if($("#lock").classList.contains("hidden"))return;
-  if(/^\d$/.test(e.key))pinPress(e.key);
-  else if(e.key==="Backspace")pinPress("del");
-  else if(e.key==="Enter")pinPress("ok");}
-function pinPress(k){
-  if(locked)return;
-  if(k==="del")pinBuf=pinBuf.slice(0,-1);
-  else if(k==="ok"){checkPin();return;}
-  else if(pinBuf.length<PIN_MAX)pinBuf+=k;
-  updateDots();
-}
-function updateDots(){
-  const n=pinBuf.length;
-  $("#pinDots").innerHTML = n? Array.from({length:n},()=>'<i class="on"></i>').join("") : '<i></i>';
+  const inp=$("#pinInput");
+  $("#pinGo").onclick=checkPin;
+  inp.onkeydown=e=>{if(e.key==="Enter")checkPin();};
+  inp.focus();
 }
 function checkPin(){
-  if(!pinBuf.length)return;
+  if(locked)return;
+  const inp=$("#pinInput"); const val=inp.value;
+  if(!val)return;
   const pin=localStorage.getItem("ogenPIN")||PIN_DEFAULT;
-  if(pinBuf===pin){unlock();}
+  if(val===pin){unlock();}
   else{
-    attempts++; $("#pinDots").classList.add("err");
-    setTimeout(()=>{$("#pinDots").classList.remove("err");pinBuf="";updateDots();},450);
+    attempts++; inp.value=""; inp.classList.add("shake");
+    setTimeout(()=>inp.classList.remove("shake"),450);
     if(attempts>=5){locked=true;lockout();}
     else $("#lockMsg").textContent=`קוד שגוי — נותרו ${5-attempts} ניסיונות`;
   }
@@ -1952,7 +1995,6 @@ function lockout(){
 }
 function unlock(){
   $("#lock").classList.add("hidden");$("#app").classList.remove("hidden");
-  document.removeEventListener("keydown",lockKey);
   boot();
 }
 
@@ -1960,6 +2002,9 @@ function unlock(){
    BOOT
    ============================================================ */
 function boot(){
+  const u=me(); const su=db.staff.find(s=>s.name===u);
+  $("#whoName").textContent=u; $("#whoAva").textContent=(u[0]||"?");
+  if(su&&$("#whoRole"))$("#whoRole").textContent=su.role||"מנהל השמה";
   renderNav(); go("dash");
   setSyncStatus(syncEnabled()?"connecting":"local"); initFirebase();
   $("#globalSearch").oninput=e=>{
