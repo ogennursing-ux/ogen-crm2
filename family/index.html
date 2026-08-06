@@ -4,164 +4,228 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0A2733">
-<title>חיבור בקליק — המטפל/ת המושלם/ת בהחלקה אחת</title>
+<title>חיבור בקליק — עוגן סיעוד</title>
 <link rel="manifest" href="manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
-   חיבור בקליק · family-facing Tinder matching
+   חיבור בקליק 2.0 — a real app: accounts, discover, profiles, chat
    ============================================================ */
 :root{
-  --sea-950:#0A2733; --sea-900:#0C3543; --anchor:#0D4F5C; --sea-500:#2E8CA0; --sea-400:#4FA8BC;
+  --sea-950:#0A2733; --anchor:#0D4F5C; --sea-500:#2E8CA0; --sea-400:#4FA8BC;
   --mist:#EEF3F4; --paper:#fff; --sand:#E9B44C;
   --like:#12A594; --like-soft:#D6F1ED; --nope:#E5563E; --nope-soft:#FADFD9; --super:#5B8DEF;
-  --ink:#12242E; --ink-2:#41565F; --ink-3:#6E8189; --line:#E0E8E9;
-  --grad-warm:linear-gradient(150deg,#ff9a6c,#e5563e);
+  --ink:#12242E; --ink-2:#41565F; --ink-3:#6E8189; --line:#E4ECED;
   --grad-cool:linear-gradient(150deg,#4FA8BC,#0D4F5C);
+  --grad-warm:linear-gradient(150deg,#ffb27a,#e5563e);
   --font:"Heebo",system-ui,-apple-system,"Segoe UI",sans-serif;
-  --shadow:0 10px 40px -8px rgba(10,39,51,.22);
-  --shadow-lg:0 30px 70px -14px rgba(10,39,51,.4);
+  --shadow:0 10px 34px -10px rgba(10,39,51,.22); --shadow-lg:0 28px 64px -14px rgba(10,39,51,.4);
+  --nav-h:64px;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden}
-body{font-family:var(--font);color:var(--ink);
-  background:radial-gradient(130% 100% at 50% 0%,#12414f,#0A2733);
-  display:flex;align-items:center;justify-content:center}
+body{font-family:var(--font);color:var(--ink);background:#0A2733;display:flex;align-items:center;justify-content:center}
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
-input,select{font-family:inherit;font-size:16px}
-.app{width:min(100vw,440px);height:100dvh;max-height:920px;background:var(--mist);
-  position:relative;overflow:hidden;display:flex;flex-direction:column;box-shadow:var(--shadow-lg)}
-@media(min-width:460px){.app{border-radius:26px;height:min(100dvh,900px)}}
-.screen{position:absolute;inset:0;display:flex;flex-direction:column;opacity:0;pointer-events:none;
-  transition:opacity .3s;overflow-y:auto}
-.screen.on{opacity:1;pointer-events:auto}
+input,select,textarea{font-family:inherit;font-size:16px}
+img{display:block;max-width:100%}
+.app{width:min(100vw,440px);height:100dvh;max-height:940px;background:var(--mist);position:relative;overflow:hidden;
+  display:flex;flex-direction:column;box-shadow:var(--shadow-lg)}
+@media(min-width:460px){.app{border-radius:28px;height:min(100dvh,920px)}}
 
-/* topbar */
-.top{height:60px;flex:none;display:flex;align-items:center;gap:10px;padding:0 18px;
-  background:var(--paper);border-bottom:1px solid var(--line);z-index:5}
-.top .logo{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--grad-cool)}
-.top .logo svg{width:20px;height:20px}
+.screen{position:absolute;inset:0;display:none;flex-direction:column;background:var(--mist)}
+.screen.on{display:flex}
+.fade{animation:fade .25s}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* ---------- generic ---------- */
+.big-btn{width:100%;height:54px;border-radius:16px;background:var(--sand);color:var(--sea-950);font-size:16.5px;font-weight:800;
+  box-shadow:0 12px 26px -10px rgba(233,180,76,.55);transition:.15s;display:flex;align-items:center;justify-content:center;gap:8px}
+.big-btn:active{transform:scale(.98)}
+.big-btn.cool{background:var(--grad-cool);color:#fff;box-shadow:0 12px 26px -10px rgba(13,79,92,.5)}
+.big-btn.outline{background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.35);box-shadow:none}
+.big-btn.dark{background:var(--sea-950);color:#fff;box-shadow:none}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:13px;font-weight:700;color:var(--ink-2);margin-bottom:7px}
+.field input,.field select,.field textarea{width:100%;height:50px;border-radius:14px;border:1.5px solid var(--line);
+  background:var(--paper);padding:0 15px;font-size:15px}
+.field textarea{height:auto;min-height:70px;padding:12px 15px}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--sea-400)}
+.opts{display:flex;flex-wrap:wrap;gap:8px}
+.opt{padding:10px 14px;border-radius:13px;background:var(--paper);border:1.5px solid var(--line);font-size:14px;font-weight:600;color:var(--ink-2);transition:.14s}
+.opt.sel{border-color:var(--anchor);background:var(--anchor);color:#fff}
+.opt:active{transform:scale(.96)}
+
+/* ---------- auth ---------- */
+#welcome{background:radial-gradient(120% 90% at 50% 8%,#12414f,#0A2733);color:#fff;align-items:center;justify-content:center;text-align:center;padding:34px}
+.mark{width:92px;height:92px;border-radius:28px;display:grid;place-items:center;margin-bottom:24px;background:var(--grad-cool);
+  box-shadow:0 20px 50px -10px rgba(46,140,160,.5);animation:float 3.5s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+.mark svg{width:50px;height:50px}
+#welcome h1{font-size:40px;font-weight:900;letter-spacing:-.02em;margin-bottom:12px}
+#welcome h1 span{color:var(--sand)}
+#welcome p{color:rgba(255,255,255,.72);font-size:16px;line-height:1.6;max-width:300px;margin-bottom:36px}
+.auth-btns{width:min(88vw,340px);display:flex;flex-direction:column;gap:12px}
+.auth-head{padding:20px;display:flex;align-items:center;gap:12px}
+.auth-head .back{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--paper);box-shadow:var(--shadow)}
+.auth-head h2{font-size:22px;font-weight:800;color:var(--sea-950)}
+.auth-body{flex:1;overflow-y:auto;padding:6px 22px 30px}
+.auth-body .intro{color:var(--ink-3);font-size:14px;margin-bottom:20px}
+.section-t{font-size:12px;font-weight:800;letter-spacing:.05em;color:var(--ink-3);text-transform:uppercase;margin:20px 0 10px}
+
+/* ---------- app shell ---------- */
+.top{height:56px;flex:none;display:flex;align-items:center;gap:10px;padding:0 16px;background:var(--paper);border-bottom:1px solid var(--line);z-index:6}
+.top .logo{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;background:var(--grad-cool)}
+.top .logo svg{width:19px;height:19px}
 .top b{font-size:16px;font-weight:800;color:var(--sea-950)}
 .top b span{color:var(--sea-500)}
-.top .step{margin-inline-start:auto;font-size:12px;font-weight:700;color:var(--ink-3)}
+.top .t-act{margin-inline-start:auto;width:38px;height:38px;border-radius:11px;display:grid;place-items:center;color:var(--ink-3)}
+.top .t-act:active{background:var(--mist)}
+.tab{flex:1;overflow-y:auto;position:relative}
+.tab.pad{padding:16px}
 
-/* ---------- welcome ---------- */
-#welcome{background:radial-gradient(120% 90% at 50% 10%,#12414f,#0A2733);color:#fff;
-  align-items:center;justify-content:center;text-align:center;padding:32px}
-#welcome .mark{width:96px;height:96px;border-radius:30px;display:grid;place-items:center;margin-bottom:26px;
-  background:linear-gradient(150deg,var(--anchor),var(--sea-500));box-shadow:0 20px 50px -10px rgba(46,140,160,.5);
-  animation:float 3.5s ease-in-out infinite}
-@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
-#welcome .mark svg{width:52px;height:52px}
-#welcome h1{font-size:38px;font-weight:900;letter-spacing:-.02em;margin-bottom:12px;line-height:1.05}
-#welcome h1 span{color:var(--sand)}
-#welcome p{color:rgba(255,255,255,.72);font-size:16px;line-height:1.6;max-width:300px;margin-bottom:8px}
-#welcome .sub{color:rgba(255,255,255,.5);font-size:13px;margin-bottom:38px}
-.big-btn{width:min(88vw,340px);height:58px;border-radius:18px;background:var(--sand);color:var(--sea-950);
-  font-size:17px;font-weight:800;box-shadow:0 14px 30px -8px rgba(233,180,76,.5);transition:.15s}
-.big-btn:active{transform:scale(.97)}
-.big-btn.cool{background:var(--grad-cool);color:#fff;box-shadow:0 14px 30px -8px rgba(13,79,92,.5)}
-.ghost-btn{background:none;color:rgba(255,255,255,.7);font-weight:600;font-size:14px;margin-top:16px}
-#welcome .feats{display:flex;gap:18px;margin-top:34px}
-#welcome .feat{color:rgba(255,255,255,.85);font-size:12px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:7px}
-#welcome .feat .fi{width:44px;height:44px;border-radius:14px;background:rgba(255,255,255,.08);display:grid;place-items:center}
-#welcome .feat .fi svg{width:22px;height:22px}
+.nav{height:var(--nav-h);flex:none;background:var(--paper);border-top:1px solid var(--line);display:flex;z-index:6}
+.nav button{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--ink-3);position:relative}
+.nav button svg{width:23px;height:23px}
+.nav button span{font-size:10px;font-weight:700}
+.nav button.on{color:var(--anchor)}
+.nav button .dot{position:absolute;top:8px;inset-inline-end:calc(50% - 16px);min-width:16px;height:16px;padding:0 4px;border-radius:9px;
+  background:var(--nope);color:#fff;font-size:10px;font-weight:800;display:grid;place-items:center}
 
-/* ---------- quiz ---------- */
-#quiz{background:var(--mist)}
-.quiz-body{flex:1;overflow-y:auto;padding:20px 20px 120px}
-.quiz-body h2{font-size:22px;font-weight:800;color:var(--sea-950);margin-bottom:4px}
-.quiz-body .lead{color:var(--ink-3);font-size:14px;margin-bottom:22px}
-.q{margin-bottom:22px}
-.q > label{display:block;font-size:14.5px;font-weight:700;color:var(--sea-950);margin-bottom:10px}
-.opts{display:flex;flex-wrap:wrap;gap:9px}
-.opt{padding:11px 15px;border-radius:14px;background:var(--paper);border:1.5px solid var(--line);
-  font-size:14px;font-weight:600;color:var(--ink-2);transition:.14s;display:inline-flex;align-items:center;gap:7px}
-.opt:active{transform:scale(.96)}
-.opt.sel{border-color:var(--anchor);background:var(--anchor);color:#fff;box-shadow:0 6px 16px -6px rgba(13,79,92,.5)}
-.opt .em{font-size:16px}
-.q input.txt,.q select{width:100%;height:50px;border-radius:14px;border:1.5px solid var(--line);
-  background:var(--paper);padding:0 15px;font-size:15px;color:var(--ink)}
-.q input.txt:focus,.q select:focus{outline:none;border-color:var(--sea-400)}
-.range-val{font-weight:800;color:var(--anchor);font-size:16px}
-input[type=range]{width:100%;accent-color:var(--anchor);height:32px}
-.quiz-foot{position:absolute;bottom:0;left:0;right:0;padding:16px 20px;background:linear-gradient(transparent,var(--mist) 30%);}
-.quiz-foot .big-btn{width:100%}
-
-/* ---------- deck ---------- */
-#deck{background:linear-gradient(180deg,#dfeaec,#eef3f4)}
-.deck-wrap{flex:1;position:relative;padding:16px 16px 0;display:flex;flex-direction:column}
-.stack{flex:1;position:relative;margin-bottom:8px}
-.card{position:absolute;inset:0;border-radius:24px;background:var(--paper);overflow:hidden;
-  box-shadow:var(--shadow);will-change:transform;display:flex;flex-direction:column;user-select:none}
+/* ---------- discover deck ---------- */
+.deck-wrap{position:absolute;inset:0;padding:14px 14px 0;display:flex;flex-direction:column}
+.stack{flex:1;position:relative;margin-bottom:6px}
+.card{position:absolute;inset:0;border-radius:24px;background:var(--paper);overflow:hidden;box-shadow:var(--shadow);
+  will-change:transform;display:flex;flex-direction:column;user-select:none}
 .card.top{cursor:grab}
-.card .photo{height:53%;position:relative;display:grid;place-items:center;flex:none;overflow:hidden}
-.card .photo .init{font-size:74px;font-weight:800;color:rgba(255,255,255,.92)}
-.card .photo .avail{position:absolute;top:14px;inset-inline-end:14px;background:rgba(255,255,255,.92);
-  color:var(--like);font-size:11.5px;font-weight:800;padding:5px 11px;border-radius:20px;display:flex;align-items:center;gap:5px}
-.card .photo .avail .d{width:7px;height:7px;border-radius:50%;background:var(--like)}
-.card .ring{position:absolute;bottom:-30px;inset-inline-start:20px;width:64px;height:64px}
-.card .ring svg{width:64px;height:64px;transform:rotate(-90deg)}
-.card .ring .rbg{fill:#fff;stroke:var(--line);stroke-width:6}
-.card .ring .rfg{fill:none;stroke:var(--like);stroke-width:6;stroke-linecap:round}
-.card .ring .rv{position:absolute;inset:0;display:grid;place-items:center;text-align:center}
-.card .ring .rv b{font-size:19px;font-weight:900;color:var(--sea-950);line-height:1}
-.card .ring .rv span{font-size:8px;color:var(--ink-3);font-weight:700}
-.card .info{flex:1;padding:34px 20px 16px;overflow:hidden;display:flex;flex-direction:column}
-.card .info h3{font-size:23px;font-weight:800;color:var(--sea-950);display:flex;align-items:baseline;gap:8px}
-.card .info h3 small{font-size:15px;font-weight:600;color:var(--ink-3)}
-.card .info .loc{color:var(--ink-3);font-size:14px;margin:3px 0 12px;display:flex;align-items:center;gap:5px}
-.card .badges{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}
-.badge{font-size:12px;font-weight:700;padding:6px 11px;border-radius:20px;background:var(--mist);color:var(--ink-2);display:inline-flex;align-items:center;gap:5px}
-.badge.good{background:var(--like-soft);color:var(--like)}
-.card .reasons{margin-top:auto}
-.card .reasons .rt{font-size:12px;font-weight:800;color:var(--ink-3);margin-bottom:6px}
-.card .reason{display:flex;align-items:center;gap:7px;font-size:13.5px;color:var(--ink-2);margin-bottom:4px}
-.card .reason svg{width:15px;height:15px;color:var(--like);flex:none}
-.stamp{position:absolute;top:34px;padding:8px 18px;border-radius:12px;font-size:30px;font-weight:900;
-  border:4px solid;opacity:0;transform:rotate(-16deg);pointer-events:none;letter-spacing:1px}
-.stamp.like{inset-inline-start:22px;color:var(--like);border-color:var(--like)}
+.card .photo{height:56%;position:relative;flex:none;display:grid;place-items:center;overflow:hidden}
+.card .photo img{width:100%;height:100%;object-fit:cover}
+.card .photo .init{font-size:76px;font-weight:800;color:rgba(255,255,255,.9)}
+.card .photo::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 55%,rgba(0,0,0,.55))}
+.card .vbtn{position:absolute;top:14px;inset-inline-start:14px;width:44px;height:44px;border-radius:50%;
+  background:rgba(0,0,0,.4);backdrop-filter:blur(4px);display:grid;place-items:center;z-index:3;color:#fff}
+.card .vbtn svg{width:20px;height:20px;margin-inline-start:2px}
+.card .avail{position:absolute;top:14px;inset-inline-end:14px;background:rgba(255,255,255,.92);color:var(--like);font-size:11.5px;
+  font-weight:800;padding:5px 11px;border-radius:20px;display:flex;align-items:center;gap:5px;z-index:3}
+.card .avail .d{width:7px;height:7px;border-radius:50%;background:var(--like)}
+.card .pdata{position:absolute;bottom:14px;inset-inline-start:16px;inset-inline-end:16px;color:#fff;z-index:3}
+.card .pdata h3{font-size:26px;font-weight:800;display:flex;align-items:baseline;gap:8px}
+.card .pdata h3 small{font-size:16px;font-weight:600;opacity:.85}
+.card .pdata .loc{font-size:14px;opacity:.9;margin-top:2px;display:flex;align-items:center;gap:5px}
+.card .pct{position:absolute;top:64px;inset-inline-end:14px;background:#fff;border-radius:14px;padding:6px 10px;text-align:center;z-index:3;box-shadow:var(--shadow)}
+.card .pct b{font-size:17px;font-weight:900;color:var(--like);line-height:1;display:block}
+.card .pct span{font-size:8px;color:var(--ink-3);font-weight:700}
+.card .body{flex:1;padding:14px 18px;overflow:hidden}
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px}
+.chip{font-size:12px;font-weight:700;padding:6px 11px;border-radius:20px;background:var(--mist);color:var(--ink-2);display:inline-flex;align-items:center;gap:5px}
+.chip.good{background:var(--like-soft);color:var(--like)}
+.reasons .r{display:flex;align-items:center;gap:7px;font-size:13.5px;color:var(--ink-2);margin-bottom:4px}
+.reasons .r svg{width:15px;height:15px;color:var(--like);flex:none}
+.tap-hint{text-align:center;font-size:11.5px;color:var(--ink-3);margin-top:6px}
+.stamp{position:absolute;top:32px;padding:7px 16px;border-radius:12px;font-size:28px;font-weight:900;border:4px solid;opacity:0;z-index:4;pointer-events:none}
+.stamp.like{inset-inline-start:22px;color:var(--like);border-color:var(--like);transform:rotate(-16deg)}
 .stamp.nope{inset-inline-end:22px;color:var(--nope);border-color:var(--nope);transform:rotate(16deg)}
-.deck-actions{flex:none;display:flex;align-items:center;justify-content:center;gap:18px;padding:12px 0 22px}
-.act{width:62px;height:62px;border-radius:50%;background:var(--paper);box-shadow:var(--shadow);display:grid;place-items:center;transition:.14s}
-.act:active{transform:scale(.9)}
-.act svg{width:28px;height:28px}
-.act.nope{color:var(--nope)} .act.like{width:72px;height:72px;color:#fff;background:var(--like)}
-.act.like svg{width:34px;height:34px} .act.info{color:var(--super);width:50px;height:50px}
-.act.info svg{width:22px;height:22px}
-.deck-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  text-align:center;padding:30px;gap:8px}
-.deck-empty .ic{width:76px;height:76px;border-radius:24px;background:var(--grad-cool);display:grid;place-items:center;margin-bottom:8px}
-.deck-empty .ic svg{width:38px;height:38px}
-.deck-empty h3{font-size:21px;font-weight:800;color:var(--sea-950)}
-.deck-empty p{color:var(--ink-3);font-size:14px;max-width:260px}
+.deck-actions{flex:none;display:flex;align-items:center;justify-content:center;gap:16px;padding:10px 0 16px}
+.act{width:58px;height:58px;border-radius:50%;background:var(--paper);box-shadow:var(--shadow);display:grid;place-items:center;transition:.14s}
+.act:active{transform:scale(.9)} .act svg{width:26px;height:26px}
+.act.nope{color:var(--nope)} .act.like{width:70px;height:70px;color:#fff;background:var(--like)} .act.like svg{width:32px;height:32px}
+.act.info{color:var(--super);width:48px;height:48px} .act.info svg{width:21px;height:21px}
+.empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px;gap:8px}
+.empty .ic{width:74px;height:74px;border-radius:22px;background:var(--grad-cool);display:grid;place-items:center;margin-bottom:6px}
+.empty .ic svg{width:36px;height:36px}
+.empty h3{font-size:20px;font-weight:800;color:var(--sea-950)}
+.empty p{color:var(--ink-3);font-size:14px;max-width:250px}
 
-/* ---------- shortlist ---------- */
-#shortlist{background:var(--mist)}
-.sl-body{flex:1;overflow-y:auto;padding:22px 20px 120px}
-.sl-hero{text-align:center;margin-bottom:22px}
-.sl-hero .v{width:72px;height:72px;border-radius:50%;background:var(--like);display:grid;place-items:center;margin:0 auto 14px;
-  box-shadow:0 14px 30px -8px rgba(18,165,148,.5)}
-.sl-hero .v svg{width:38px;height:38px;color:#fff}
-.sl-hero h2{font-size:24px;font-weight:800;color:var(--sea-950)}
-.sl-hero p{color:var(--ink-3);font-size:14.5px;margin-top:5px;line-height:1.55}
-.sl-card{display:flex;align-items:center;gap:13px;background:var(--paper);border-radius:18px;padding:12px;
-  margin-bottom:11px;box-shadow:0 3px 12px rgba(10,39,51,.06)}
-.sl-card .av{width:54px;height:54px;border-radius:14px;flex:none;display:grid;place-items:center;color:#fff;font-weight:800;font-size:21px}
-.sl-card .m{flex:1;min-width:0}
-.sl-card .m b{font-size:16px;font-weight:800;color:var(--sea-950)}
-.sl-card .m span{display:block;font-size:12.5px;color:var(--ink-3);margin-top:2px}
-.sl-card .pc{font-size:19px;font-weight:900;color:var(--like)}
-.sl-foot{position:absolute;bottom:0;left:0;right:0;padding:16px 20px;background:linear-gradient(transparent,var(--mist) 30%)}
-.sl-foot .big-btn{width:100%;margin-bottom:9px}
+/* ---------- lists (likes/matches/chat) ---------- */
+.list-row{display:flex;align-items:center;gap:13px;background:var(--paper);border-radius:18px;padding:11px;margin-bottom:10px;box-shadow:0 3px 12px rgba(10,39,51,.06)}
+.list-row:active{transform:scale(.99)}
+.av{width:56px;height:56px;border-radius:15px;flex:none;display:grid;place-items:center;color:#fff;font-weight:800;font-size:21px;overflow:hidden;position:relative}
+.av img{width:100%;height:100%;object-fit:cover}
+.av .on-dot{position:absolute;bottom:2px;inset-inline-end:2px;width:12px;height:12px;border-radius:50%;background:var(--like);border:2px solid #fff}
+.list-row .m{flex:1;min-width:0}
+.list-row .m b{font-size:16px;font-weight:800;color:var(--sea-950);display:flex;align-items:center;gap:6px}
+.list-row .m span{display:block;font-size:12.5px;color:var(--ink-3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list-row .side{text-align:center;flex:none}
+.list-row .side .pc{font-size:17px;font-weight:900;color:var(--like)}
+.badge-match{font-size:10px;font-weight:800;color:#fff;background:var(--like);padding:3px 8px;border-radius:20px}
+.badge-wait{font-size:10px;font-weight:800;color:#b5701f;background:#FBEBD6;padding:3px 8px;border-radius:20px}
+.time{font-size:11px;color:var(--ink-3)}
+.list-head{font-size:20px;font-weight:800;color:var(--sea-950);margin:4px 2px 14px}
+.list-sub{font-size:13px;color:var(--ink-3);margin:-10px 2px 16px}
 
-/* toast */
-#toast{position:absolute;bottom:96px;left:50%;transform:translateX(-50%) translateY(20px);opacity:0;
-  background:var(--sea-950);color:#fff;padding:11px 20px;border-radius:14px;font-size:14px;font-weight:600;
-  z-index:20;transition:.25s;box-shadow:var(--shadow);white-space:nowrap}
+/* ---------- profile detail (caregiver) ---------- */
+#detail{background:var(--mist)}
+.d-hero{height:44%;flex:none;position:relative;display:grid;place-items:center;overflow:hidden}
+.d-hero img{width:100%;height:100%;object-fit:cover}
+.d-hero .init{font-size:90px;font-weight:800;color:rgba(255,255,255,.9)}
+.d-hero::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 50%,rgba(0,0,0,.6))}
+.d-back{position:absolute;top:16px;inset-inline-end:16px;width:42px;height:42px;border-radius:50%;background:rgba(0,0,0,.4);backdrop-filter:blur(5px);display:grid;place-items:center;color:#fff;z-index:5}
+.d-vbtn{position:absolute;top:16px;inset-inline-start:16px;height:42px;padding:0 15px;border-radius:22px;background:rgba(0,0,0,.4);backdrop-filter:blur(5px);display:flex;align-items:center;gap:7px;color:#fff;font-weight:700;font-size:13px;z-index:5}
+.d-vbtn svg{width:17px;height:17px}
+.d-name{position:absolute;bottom:16px;inset-inline-start:20px;inset-inline-end:20px;color:#fff;z-index:4}
+.d-name h2{font-size:30px;font-weight:800;display:flex;align-items:baseline;gap:9px}
+.d-name h2 small{font-size:17px;font-weight:600;opacity:.85}
+.d-name .loc{font-size:14.5px;opacity:.92;margin-top:3px}
+.d-body{flex:1;overflow-y:auto;padding:18px 20px 130px}
+.d-pct{display:flex;align-items:center;gap:12px;background:var(--like-soft);border-radius:16px;padding:13px 16px;margin-bottom:18px}
+.d-pct .big{font-size:30px;font-weight:900;color:var(--like)}
+.d-pct .tx{font-size:13.5px;color:#0c7a6d;font-weight:600;line-height:1.4}
+.d-sec{margin-bottom:20px}
+.d-sec h4{font-size:13px;font-weight:800;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px}
+.d-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.d-item{background:var(--paper);border-radius:14px;padding:12px 14px}
+.d-item .k{font-size:11.5px;color:var(--ink-3);font-weight:600}
+.d-item .v{font-size:15px;font-weight:800;color:var(--sea-950);margin-top:2px}
+.rec{background:var(--paper);border-radius:14px;padding:13px 15px;margin-bottom:9px;font-size:14px;color:var(--ink-2);line-height:1.5}
+.rec .who{font-weight:800;color:var(--sea-950);font-size:13px;margin-bottom:3px}
+.rec .stars{color:var(--sand);font-size:13px}
+.d-foot{position:absolute;bottom:0;left:0;right:0;padding:14px 20px;background:linear-gradient(transparent,var(--mist) 26%);display:flex;gap:10px}
+.d-foot .big-btn{height:52px}
+.d-foot .pass{flex:none;width:56px;background:var(--paper);border:1.5px solid var(--line);color:var(--nope);box-shadow:none}
+
+/* ---------- chat thread ---------- */
+#chat-thread{background:#e9eef0}
+.ct-head{height:60px;flex:none;background:var(--paper);display:flex;align-items:center;gap:11px;padding:0 14px;border-bottom:1px solid var(--line);z-index:5}
+.ct-head .back{width:36px;height:36px;display:grid;place-items:center;color:var(--ink-2)}
+.ct-head .av{width:40px;height:40px;border-radius:50%}
+.ct-head .who b{font-size:15px;font-weight:800;color:var(--sea-950);display:block}
+.ct-head .who span{font-size:11.5px;color:var(--like);font-weight:600}
+.ct-head .wa{margin-inline-start:auto;width:40px;height:40px;border-radius:11px;display:grid;place-items:center;color:#25D366}
+.ct-body{flex:1;overflow-y:auto;padding:16px 14px;display:flex;flex-direction:column;gap:8px}
+.bub{max-width:80%;padding:9px 13px;border-radius:15px;font-size:14.5px;line-height:1.45;position:relative;animation:fade .18s;word-wrap:break-word}
+.bub.me{align-self:flex-end;background:var(--anchor);color:#fff;border-bottom-left-radius:4px}
+.bub.them{align-self:flex-start;background:#fff;color:var(--ink);border-bottom-right-radius:4px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.bub time{display:block;font-size:9.5px;opacity:.6;text-align:end;margin-top:3px}
+.bub.me .rr{font-size:10px;opacity:.75}
+.ct-foot{flex:none;background:var(--paper);padding:10px 12px;display:flex;gap:9px;align-items:center;border-top:1px solid var(--line)}
+.ct-foot input{flex:1;height:46px;border-radius:23px;border:1px solid var(--line);background:var(--mist);padding:0 16px;font-size:15px}
+.ct-foot input:focus{outline:none;border-color:var(--sea-400)}
+.ct-foot .send{width:46px;height:46px;border-radius:50%;background:var(--anchor);color:#fff;display:grid;place-items:center;flex:none}
+.ct-foot .send svg{width:20px;height:20px}
+.wa-note{text-align:center;font-size:11px;color:var(--ink-3);padding:6px}
+
+/* ---------- profile (self) ---------- */
+.p-head{background:var(--grad-cool);color:#fff;padding:26px 20px 22px;text-align:center}
+.p-head .pav{width:76px;height:76px;border-radius:50%;background:rgba(255,255,255,.15);display:grid;place-items:center;margin:0 auto 12px;font-size:30px;font-weight:800}
+.p-head h2{font-size:22px;font-weight:800}
+.p-head span{opacity:.8;font-size:13.5px}
+.p-stats{display:flex;gap:10px;padding:16px;margin-top:-2px}
+.p-stat{flex:1;background:var(--paper);border-radius:16px;padding:14px;text-align:center;box-shadow:0 3px 12px rgba(10,39,51,.06)}
+.p-stat b{font-size:24px;font-weight:900;color:var(--anchor);display:block}
+.p-stat span{font-size:11.5px;color:var(--ink-3);font-weight:600}
+
+/* modal / toast */
+.scrim{position:absolute;inset:0;z-index:40;background:rgba(10,39,51,.55);display:flex;align-items:center;justify-content:center;padding:24px;animation:fade .2s}
+.modal{width:100%;max-width:360px;background:var(--paper);border-radius:22px;padding:22px;text-align:center;box-shadow:var(--shadow-lg)}
+.modal .mi{width:64px;height:64px;border-radius:20px;display:grid;place-items:center;margin:0 auto 14px}
+.modal h3{font-size:21px;font-weight:800;color:var(--sea-950);margin-bottom:6px}
+.modal p{font-size:14px;color:var(--ink-2);line-height:1.5;margin-bottom:18px}
+#toast{position:absolute;bottom:calc(var(--nav-h) + 16px);left:50%;transform:translateX(-50%) translateY(16px);opacity:0;
+  background:var(--sea-950);color:#fff;padding:11px 20px;border-radius:14px;font-size:14px;font-weight:600;z-index:50;transition:.25s;box-shadow:var(--shadow);white-space:nowrap;pointer-events:none}
 #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+.match-anim{animation:pop .4s cubic-bezier(.2,.9,.3,1.2)}
+@keyframes pop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
 </style>
 </head>
 <body>
@@ -169,60 +233,63 @@ input[type=range]{width:100%;accent-color:var(--anchor);height:32px}
 
   <!-- ===== WELCOME ===== -->
   <section class="screen on" id="welcome">
-    <div class="mark">
-      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="5" r="2.5"/><path d="M12 7.5V21M5 12H3s0 6 9 9c9-3 9-9 9-9h-2M5 12a7 7 0 0 0 14 0"/></svg>
-    </div>
+    <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5"/><path d="M12 7.5V21M5 12H3s0 6 9 9c9-3 9-9 9-9h-2M5 12a7 7 0 0 0 14 0"/></svg></div>
     <h1>חיבור <span>בקליק</span></h1>
     <p>המטפל/ת המושלם/ת עבור יקירכם — בהחלקה אחת.</p>
-    <div class="sub">התאמה חכמה מבית עוגן סיעוד ⚓</div>
-    <button class="big-btn" onclick="go('quiz')">בואו נתחיל →</button>
-    <div class="feats">
-      <div class="feat"><div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="#E9B44C" stroke-width="2" stroke-linecap="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 1 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/></svg></div>התאמה לפי צורך</div>
-      <div class="feat"><div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="#4FA8BC" stroke-width="2" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg></div>מטפלים מאומתים</div>
-      <div class="feat"><div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="#12A594" stroke-width="2" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9z"/></svg></div>מהיר וקל</div>
+    <div class="auth-btns">
+      <button class="big-btn" onclick="go('signup')">הרשמה חדשה</button>
+      <button class="big-btn outline" onclick="go('login')">כבר יש לי חשבון — כניסה</button>
     </div>
   </section>
 
-  <!-- ===== QUIZ ===== -->
-  <section class="screen" id="quiz">
+  <!-- ===== SIGNUP ===== -->
+  <section class="screen" id="signup">
+    <div class="auth-head"><button class="back" onclick="go('welcome')">→</button><h2>הרשמה</h2></div>
+    <div class="auth-body">
+      <div class="intro">פותחים חשבון פעם אחת — וממשיכים מאיפה שהפסקתם, בכל כניסה.</div>
+      <div class="field"><label>שם מלא</label><input id="su-name" placeholder="למשל: מיכל כהן"></div>
+      <div class="field"><label>תעודת זהות</label><input id="su-id" inputmode="numeric" placeholder="9 ספרות"></div>
+      <div class="field"><label>טלפון</label><input id="su-phone" inputmode="tel" placeholder="050-0000000"></div>
+      <div class="section-t">על מי מטפלים?</div>
+      <div class="field"><label>איזה מטפל/ת אתם מחפשים?</label><div class="opts" id="su-gender"></div></div>
+      <div class="field"><label>עיר</label><select id="su-city"></select></div>
+      <div class="field"><label>צרכי טיפול</label><div class="opts" id="su-needs"></div></div>
+      <div class="field"><label>שפה מועדפת</label><div class="opts" id="su-lang"></div></div>
+      <div class="field"><label>תקציב חודשי: <b id="su-budval" style="color:var(--anchor)">5,800 ₪</b></label>
+        <input type="range" id="su-bud" min="4500" max="8000" step="100" value="5800" style="height:36px;accent-color:var(--anchor)"></div>
+      <button class="big-btn cool" style="margin-top:8px" onclick="doSignup()">יצירת חשבון ומעבר להתאמות ♥</button>
+    </div>
+  </section>
+
+  <!-- ===== LOGIN ===== -->
+  <section class="screen" id="login">
+    <div class="auth-head"><button class="back" onclick="go('welcome')">→</button><h2>כניסה</h2></div>
+    <div class="auth-body">
+      <div class="intro">מזינים שם ותעודת זהות — וממשיכים בדיוק מאיפה שהפסקתם.</div>
+      <div class="field"><label>שם מלא</label><input id="li-name" placeholder="השם שאיתו נרשמת"></div>
+      <div class="field"><label>תעודת זהות</label><input id="li-id" inputmode="numeric" placeholder="9 ספרות"></div>
+      <button class="big-btn" onclick="doLogin()">כניסה למערכת</button>
+      <p style="text-align:center;color:var(--ink-3);font-size:13px;margin-top:16px">אין לך חשבון? <a onclick="go('signup')" style="color:var(--anchor);font-weight:700;cursor:pointer">הרשמה</a></p>
+    </div>
+  </section>
+
+  <!-- ===== MAIN APP ===== -->
+  <section class="screen" id="main">
     <div class="top">
       <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5"/><path d="M12 7.5V21M5 12H3s0 6 9 9c9-3 9-9 9-9h-2M5 12a7 7 0 0 0 14 0"/></svg></div>
-      <b>חיבור <span>בקליק</span></b><div class="step">שאלון</div>
+      <b id="topTitle">גלה</b>
     </div>
-    <div class="quiz-body" id="quizBody"></div>
-    <div class="quiz-foot"><button class="big-btn cool" onclick="finishQuiz()">מצאו לי מטפל/ת ♥</button></div>
+    <div class="tab" id="tab"></div>
+    <nav class="nav" id="nav"></nav>
   </section>
 
-  <!-- ===== DECK ===== -->
-  <section class="screen" id="deck">
-    <div class="top">
-      <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5"/><path d="M12 7.5V21M5 12H3s0 6 9 9c9-3 9-9 9-9h-2M5 12a7 7 0 0 0 14 0"/></svg></div>
-      <b>מצאו התאמה</b><div class="step" id="deckStep"></div>
-    </div>
-    <div class="deck-wrap">
-      <div class="stack" id="stack"></div>
-      <div class="deck-actions">
-        <button class="act nope" onclick="swipe('nope')" aria-label="דלג"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
-        <button class="act info" onclick="showDetail()" aria-label="פרטים"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 16v-4M12 8h.01"/><circle cx="12" cy="12" r="10"/></svg></button>
-        <button class="act like" onclick="swipe('like')" aria-label="אהבתי"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-8-5.3-10-10a5.5 5.5 0 0 1 10-3 5.5 5.5 0 0 1 10 3c-2 4.7-10 10-10 10z"/></svg></button>
-      </div>
-    </div>
-  </section>
+  <!-- ===== CAREGIVER DETAIL ===== -->
+  <section class="screen" id="detail"></section>
 
-  <!-- ===== SHORTLIST ===== -->
-  <section class="screen" id="shortlist">
-    <div class="top">
-      <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5"/><path d="M12 7.5V21M5 12H3s0 6 9 9c9-3 9-9 9-9h-2M5 12a7 7 0 0 0 14 0"/></svg></div>
-      <b>הבחירות שלכם</b>
-    </div>
-    <div class="sl-body" id="slBody"></div>
-    <div class="sl-foot">
-      <button class="big-btn" onclick="sendToOgen()">שלחו לעוגן לתיאום ראיון ✓</button>
-      <button class="big-btn cool" onclick="restart()">סבב חדש</button>
-    </div>
-  </section>
+  <!-- ===== CHAT THREAD ===== -->
+  <section class="screen" id="chat-thread"></section>
 
+  <div id="modalRoot"></div>
   <div id="toast"></div>
 </div>
 
@@ -232,243 +299,437 @@ const $=(s,r=document)=>r.querySelector(s);
 const $$=(s,r=document)=>[...r.querySelectorAll(s)];
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const money=n=>n?Number(n).toLocaleString("he-IL")+" ₪":"—";
+const now=()=>Date.now();
+const uid=p=>p+"_"+now().toString(36)+Math.random().toString(36).slice(2,5);
 const avaColors=["#0D4F5C","#2E8CA0","#E0913A","#12A594","#5B8DEF","#8B5CF6","#E5563E","#0891B2"];
 const avaColor=s=>avaColors[[...String(s)].reduce((a,c)=>a+c.charCodeAt(0),0)%avaColors.length];
-const gradFor=s=>{const c=avaColor(s);return `linear-gradient(150deg,${c},${shade(c,-28)})`;};
 function shade(hex,p){const n=parseInt(hex.slice(1),16);let r=(n>>16)+p,g=((n>>8)&255)+p,b=(n&255)+p;
-  r=Math.max(0,Math.min(255,r));g=Math.max(0,Math.min(255,g));b=Math.max(0,Math.min(255,b));
-  return "#"+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1);}
+  r=Math.max(0,Math.min(255,r));g=Math.max(0,Math.min(255,g));b=Math.max(0,Math.min(255,b));return "#"+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1);}
+const gradFor=s=>`linear-gradient(150deg,${avaColor(s)},${shade(avaColor(s),-30)})`;
+const timeStr=t=>new Date(t).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
+const waLink=phone=>"https://wa.me/"+String(phone||"").replace(/\D/g,"").replace(/^0/,"972");
 
-/* ---------- shared caregiver pool (from CRM ogenCRM3, else demo) ---------- */
+/* ---------- SVG icons ---------- */
+const I={
+  discover:'<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 1 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/>',
+  likes:'<path d="M12 21s-8-5.3-10-10a5.5 5.5 0 0 1 10-3 5.5 5.5 0 0 1 10 3c-2 4.7-10 10-10 10z"/>',
+  match:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  chat:'<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
+  user:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>', x:'<path d="M18 6 6 18M6 6l12 12"/>',
+  play:'<path d="M5 3l14 9-14 9V3z"/>', loc:'<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>',
+  send:'<path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/>', wa:'<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
+  info:'<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>', logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+};
+const svg=(p,w=22)=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:${w}px;height:${w}px">${p}</svg>`;
+const svgF=(p,w=22)=>`<svg viewBox="0 0 24 24" fill="currentColor" style="width:${w}px;height:${w}px">${p}</svg>`;
+
+/* ---------- constants ---------- */
+const CITIES=["תל אביב","ירושלים","חיפה","באר שבע","רמת גן","פתח תקווה","נתניה","ראשון לציון","אשדוד","הרצליה","חולון","כפר סבא"];
+
+/* ---------- caregiver pool (shared CRM ogenCRM3 else demo), enriched ---------- */
+const HOBBIES=["בישול","מוזיקה","קריאה","טיולים","גינון","משחקי קלפים","אפייה","יוגה"];
+const RECS=[
+  {who:"משפחת לוי",stars:5,text:"מסורה ואחראית, המטופל שלנו פרח לצידה. ממליצים בחום."},
+  {who:"משפחת כהן",stars:5,text:"סבלנית, נקייה, ויחס חם. הרגשנו במשפחה."},
+  {who:"משפחת מזרחי",stars:4,text:"מקצועית מאוד, הגיעה תמיד בזמן ולמדה מהר את השגרה."},
+];
+function enrich(w,i){
+  const seed=[...String(w.name||"x")].reduce((a,c)=>a+c.charCodeAt(0),i);
+  return Object.assign({
+    id:w.id||("demo_"+i),
+    photo:w.photo||"", video:w.video||"",
+    hobbies:w.hobbies||[HOBBIES[seed%HOBBIES.length],HOBBIES[(seed+3)%HOBBIES.length]],
+    recs:w.recs||RECS.slice(0,2+(seed%2)),
+    rating:w.rating||(4+(seed%2?0.5:0.8)).toFixed(1),
+  },w);
+}
 function loadCaregivers(){
+  let pool=null;
   try{const raw=localStorage.getItem("ogenCRM3");
-    if(raw){const db=JSON.parse(raw);
-      const ws=(db.workers||[]).filter(w=>!w._deleted&&(w.status==="זמין"||w.status==="בתהליך"));
-      if(ws.length) return ws;}
+    if(raw){const db=JSON.parse(raw);const ws=(db.workers||[]).filter(w=>!w._deleted&&(w.status==="זמין"||w.status==="בתהליך"));if(ws.length)pool=ws;}
   }catch(e){}
-  return DEMO;
+  if(!pool)pool=DEMO;
+  return pool.map(enrich);
 }
 const DEMO=[
-  {name:"מרינה",lastName:"פ.",nationality:"מולדובה",gender:"female",age:42,languages:"עברית, רוסית, אנגלית",experience:8,expectedSalary:6000,canHoist:"yes",canDiapers:"yes",knowsDementia:"yes",city:"תל אביב",status:"זמין",tags:["מנוסה","דמנציה"]},
-  {name:"אנג'לה",lastName:"ר.",nationality:"פיליפינים",gender:"female",age:35,languages:"אנגלית, עברית",experience:5,expectedSalary:5800,canHoist:"yes",canDiapers:"yes",knowsDementia:"no",city:"חיפה",status:"זמין",tags:["חייכנית"]},
-  {name:"ראג'ש",lastName:"ק.",nationality:"הודו",gender:"male",age:38,languages:"אנגלית, עברית",experience:6,expectedSalary:5500,canHoist:"yes",canDiapers:"no",knowsDementia:"no",city:"חיפה",status:"זמין",tags:["ליווי","גבר חזק"]},
-  {name:"נטליה",lastName:"ס.",nationality:"אוזבקיסטן",gender:"female",age:45,languages:"עברית, רוסית",experience:12,expectedSalary:6200,canHoist:"yes",canDiapers:"yes",knowsDementia:"yes",city:"ירושלים",status:"זמין",tags:["ותיקה","מנוף"]},
-  {name:"קומאר",lastName:"נ.",nationality:"נפאל",gender:"male",age:31,languages:"אנגלית",experience:3,expectedSalary:5000,canHoist:"no",canDiapers:"yes",knowsDementia:"yes",city:"באר שבע",status:"זמין",tags:["בישול","סבלני"]},
-  {name:"אולגה",lastName:"מ.",nationality:"מולדובה",gender:"female",age:50,languages:"עברית, רוסית",experience:15,expectedSalary:6800,canHoist:"yes",canDiapers:"yes",knowsDementia:"yes",city:"רמת גן",status:"זמין",tags:["מומחית","חמה"]},
-  {name:"מריה",lastName:"ד.",nationality:"פיליפינים",gender:"female",age:29,languages:"אנגלית, עברית",experience:4,expectedSalary:5400,canHoist:"yes",canDiapers:"yes",knowsDementia:"no",city:"תל אביב",status:"זמין",tags:["אנרגטית"]},
-  {name:"איבן",lastName:"ט.",nationality:"מולדובה",gender:"male",age:40,languages:"עברית, רוסית",experience:9,expectedSalary:6100,canHoist:"yes",canDiapers:"yes",knowsDementia:"yes",city:"פתח תקווה",status:"זמין",tags:["גבר","מנוסה"]},
+  {name:"מרינה",lastName:"פ.",nationality:"מולדובה",gender:"female",age:42,languages:"עברית, רוסית, אנגלית",experience:8,expectedSalary:6000,canHoist:"yes",canDiapers:"yes",knowsDementia:"yes",city:"תל אביב",status:"זמין",phone:"0501234567"},
+  {name:"אנג'לה",lastName:"ר.",nationality:"פיליפינים",gender:"female",age:35,languages:"אנגלית, עברית",experience:5,expectedSalary:5800,canHoist:"yes",canDiapers:"yes",knowsDementia:"no",city:"תל אביב",status:"זמין",phone:"0502345678"},
+  {name:"נטליה",lastName:"ס.",nationality:"אוזבקיסטן",gender:"female",age:45,languages:"עברית, רוסית",experience:12,expectedSalary:6200,canHoist:"yes",canDiapers:"yes",knowsDementia:"yes",city:"תל אביב",status:"זמין",phone:"0504567890"},
+  {name:"ראג'ש",lastName:"ק.",nationality:"הודו",gender:"male",age:38,languages:"אנגלית, עברית",experience:6,expectedSalary:5500,canHoist:"yes",canDiapers:"no",knowsDementia:"no",city:"תל אביב",status:"זמין",phone:"0503456789"},
+  {name:"אולגה",lastName:"מ.",nationality:"מולדובה",gender:"female",age:50,languages:"עברית, רוסית",experience:15,expectedSalary:6800,canHoist:"yes",canDiapers:"yes",knowsDementia:"yes",city:"תל אביב",status:"זמין",phone:"0506789012"},
+  {name:"מריה",lastName:"ד.",nationality:"פיליפינים",gender:"female",age:29,languages:"אנגלית, עברית",experience:4,expectedSalary:5400,canHoist:"yes",canDiapers:"yes",knowsDementia:"no",city:"תל אביב",status:"זמין",phone:"0507890123"},
+  {name:"קומאר",lastName:"נ.",nationality:"נפאל",gender:"male",age:31,languages:"אנגלית",experience:3,expectedSalary:5000,canHoist:"no",canDiapers:"yes",knowsDementia:"yes",city:"תל אביב",status:"זמין",phone:"0508901234"},
+  {name:"איבן",lastName:"ט.",nationality:"מולדובה",gender:"male",age:40,languages:"עברית, רוסית",experience:9,expectedSalary:6100,canHoist:"yes",canDiapers:"yes",knowsDementia:"yes",city:"תל אביב",status:"זמין",phone:"0509012345"},
 ];
 
-/* ---------- scoreMatch (identical engine to CRM, spec א4) ---------- */
-function scoreMatch(lead, w){
-  if(lead.gender && w.gender && lead.gender!==w.gender) return null;
-  if(lead.needsHoist==="yes" && w.canHoist==="no") return null;
-  if(lead.needsDiapers==="yes" && w.canDiapers==="no") return null;
-  if(lead.hasDementia==="yes" && w.knowsDementia==="no") return null;
-  let score=0; const reasons=[];
-  const add=(p,l)=>{score+=p;reasons.push(l);};
-  if(lead.gender && w.gender && lead.gender===w.gender) add(30, lead.gender==="female"?"מטפלת (כבקשתכם)":"מטפל (כבקשתכם)");
-  if(lead.city && w.city && (w.city.includes(lead.city)||lead.city.includes(w.city))) add(40,"באזור שלכם — "+w.city);
-  if(w.languages && lead.requirements){const L=w.languages.split(/[,\s]+/).filter(Boolean);
-    if(L.some(x=>lead.requirements.includes(x))) add(15,"דובר/ת "+lead.requirements);}
-  if(lead.offeredSalary && w.expectedSalary){const g=Math.abs(+lead.offeredSalary-+w.expectedSalary);
-    if(g===0)add(25,"מתאים לתקציב שלכם");else if(g<=300)add(22,"מתאים לתקציב שלכם");
-    else if(g<=800)add(18,"קרוב לתקציב שלכם");else if(g<=1500)add(5,"בטווח התקציב");}
-  if(lead.needsHoist==="yes" && w.canHoist==="yes") add(25,"מיומן/ת בהרמה ומנוף");
-  if(lead.hasDementia==="yes" && w.knowsDementia==="yes") add(25,"ניסיון עם דמנציה/אלצהיימר");
-  if(lead.needsDiapers==="yes" && w.canDiapers==="yes") add(15,"טיפול אישי מלא");
-  if(w.status==="זמין") add(10,"פנוי/ה להתחיל");
-  if((+w.experience||0)>=8) add(0,(w.experience)+" שנות ניסיון");
+/* ---------- scoreMatch (same engine as CRM) ---------- */
+function scoreMatch(lead,w){
+  if(lead.gender&&w.gender&&lead.gender!==w.gender)return null;
+  if(lead.needsHoist==="yes"&&w.canHoist==="no")return null;
+  if(lead.needsDiapers==="yes"&&w.canDiapers==="no")return null;
+  if(lead.hasDementia==="yes"&&w.knowsDementia==="no")return null;
+  let score=0;const reasons=[];const add=(p,l)=>{score+=p;reasons.push(l);};
+  if(lead.gender&&w.gender&&lead.gender===w.gender)add(30,lead.gender==="female"?"מטפלת (כבקשתכם)":"מטפל (כבקשתכם)");
+  if(lead.city&&w.city&&(w.city.includes(lead.city)||lead.city.includes(w.city)))add(40,"באזור שלכם — "+w.city);
+  if(w.languages&&lead.requirements){const L=w.languages.split(/[,\s]+/).filter(Boolean);if(L.some(x=>lead.requirements.includes(x)))add(15,"דובר/ת "+lead.requirements);}
+  if(lead.offeredSalary&&w.expectedSalary){const g=Math.abs(+lead.offeredSalary-+w.expectedSalary);
+    if(g<=300)add(24,"מתאים לתקציב שלכם");else if(g<=800)add(18,"קרוב לתקציב שלכם");else if(g<=1500)add(5,"בטווח התקציב");}
+  if(lead.needsHoist==="yes"&&w.canHoist==="yes")add(25,"מיומן/ת בהרמה ומנוף");
+  if(lead.hasDementia==="yes"&&w.knowsDementia==="yes")add(25,"ניסיון עם דמנציה/אלצהיימר");
+  if(lead.needsDiapers==="yes"&&w.canDiapers==="yes")add(15,"טיפול אישי מלא");
+  if(w.status==="זמין")add(10,"פנוי/ה להתחיל");
   return {score,reasons};
 }
 const pctOf=s=>Math.min(100,Math.round(s/1.8));
 
-/* ---------- state ---------- */
-let family={gender:"",city:"",area:"",needsHoist:"",needsDiapers:"",hasDementia:"",offeredSalary:5800,requirements:""};
-let deck=[], idx=0, liked=[];
+/* ============================================================
+   STATE + ACCOUNTS (localStorage; cloud sync = next phase)
+   ============================================================ */
+const DB_KEY="hb_users", SESS_KEY="hb_session";
+let users={}, me=null, caregivers=[], deck=[], deckIdx=0, curTab="discover", detailId=null, chatId=null;
+function loadUsers(){try{users=JSON.parse(localStorage.getItem(DB_KEY)||"{}");}catch(e){users={};}}
+function saveUsers(){try{localStorage.setItem(DB_KEY,JSON.stringify(users));}catch(e){}}
+const cgById=id=>caregivers.find(c=>c.id===id);
 
 /* ---------- navigation ---------- */
-function go(id){$$(".screen").forEach(s=>s.classList.toggle("on",s.id===id));
-  if(id==="quiz")renderQuiz(); window.scrollTo?.(0,0);}
-function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("on");
-  clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove("on"),1900);}
+function go(id){$$(".screen").forEach(s=>s.classList.remove("on"));const el=$("#"+id);el.classList.add("on");el.classList.add("fade");setTimeout(()=>el.classList.remove("fade"),260);}
+function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("on");clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove("on"),2000);}
 
-/* ---------- quiz ---------- */
-const CITIES=["תל אביב","ירושלים","חיפה","באר שבע","רמת גן","פתח תקווה","נתניה","ראשון לציון","אשדוד","הרצליה"];
-function renderQuiz(){
-  const chip=(field,val,label,em)=>`<button class="opt ${family[field]===val?"sel":""}" onclick="pick('${field}','${val}')">${em?`<span class="em">${em}</span>`:""}${label}</button>`;
-  $("#quizBody").innerHTML=`
-    <h2>ספרו לנו על הצורך</h2>
-    <div class="lead">כמה שאלות קצרות — ונמצא את ההתאמות הטובות ביותר.</div>
-    <div class="q"><label>איזה מטפל/ת אתם מחפשים?</label><div class="opts">
-      ${chip("gender","female","מטפלת","👩")}${chip("gender","male","מטפל","👨")}${chip("gender","","לא משנה","✨")}
-    </div></div>
-    <div class="q"><label>עיר מגורים</label>
-      <select onchange="family.city=this.value">
-        <option value="">בחרו עיר…</option>${CITIES.map(c=>`<option ${family.city===c?"selected":""}>${c}</option>`).join("")}</select></div>
-    <div class="q"><label>נדרש שימוש במנוף / הרמה?</label><div class="opts">
-      ${chip("needsHoist","yes","כן","🛠️")}${chip("needsHoist","no","לא","—")}
-    </div></div>
-    <div class="q"><label>נדרש טיפול אישי (חיתולים)?</label><div class="opts">
-      ${chip("needsDiapers","yes","כן","🧴")}${chip("needsDiapers","no","לא","—")}
-    </div></div>
-    <div class="q"><label>יש אלצהיימר / דמנציה?</label><div class="opts">
-      ${chip("hasDementia","yes","כן","🧠")}${chip("hasDementia","no","לא","—")}
-    </div></div>
-    <div class="q"><label>שפה מועדפת (לא חובה)</label>
-      <div class="opts">
-        ${["עברית","אנגלית","רוסית"].map(l=>`<button class="opt ${family.requirements===l?"sel":""}" onclick="pick('requirements','${l}')">${l}</button>`).join("")}
-        <button class="opt ${family.requirements===""?"sel":""}" onclick="pick('requirements','')">לא משנה</button>
-      </div></div>
-    <div class="q"><label>תקציב חודשי: <span class="range-val" id="budVal">${money(family.offeredSalary)}</span></label>
-      <input type="range" min="4500" max="8000" step="100" value="${family.offeredSalary}"
-        oninput="family.offeredSalary=+this.value;$('#budVal').textContent='${""}'+(+this.value).toLocaleString('he-IL')+' ₪'"></div>
-  `;
+/* ---------- signup form ---------- */
+function fillSignupForm(){
+  const chip=(box,val,label,em)=>`<button class="opt" data-v="${val}">${em?em+" ":""}${label}</button>`;
+  $("#su-gender").innerHTML=[["female","מטפלת","👩"],["male","מטפל","👨"],["","לא משנה","✨"]].map(([v,l,e])=>chip(0,v,l,e)).join("");
+  $("#su-needs").innerHTML=[["hoist","מנוף/הרמה","🛠️"],["diapers","טיפול אישי","🧴"],["dementia","דמנציה","🧠"]].map(([v,l,e])=>`<button class="opt" data-need="${v}">${e} ${l}</button>`).join("");
+  $("#su-lang").innerHTML=["עברית","אנגלית","רוסית"].map(l=>`<button class="opt" data-lang="${l}">${l}</button>`).concat(`<button class="opt sel" data-lang="">לא משנה</button>`).join("");
+  $("#su-city").innerHTML=`<option value="">בחרו עיר…</option>`+CITIES.map(c=>`<option>${c}</option>`).join("");
+  // single-select groups
+  const single=(sel,attr)=>$$(sel+" .opt").forEach(b=>b.onclick=()=>{$$(sel+" .opt").forEach(x=>x.classList.remove("sel"));b.classList.add("sel");});
+  single("#su-gender");single("#su-lang");
+  $$("#su-needs .opt").forEach(b=>b.onclick=()=>b.classList.toggle("sel")); // multi
+  $("#su-bud").oninput=e=>$("#su-budval").textContent=(+e.target.value).toLocaleString("he-IL")+" ₪";
+  // default select gender "no matter"
+  $$("#su-gender .opt")[2].classList.add("sel");
 }
-function pick(field,val){family[field]=val;renderQuiz();}
-function finishQuiz(){
-  if(!family.city){toast("בחרו עיר מגורים");return;}
+function doSignup(){
+  const name=$("#su-name").value.trim(), id=$("#su-id").value.replace(/\D/g,"");
+  if(name.length<2){toast("הזינו שם מלא");return;}
+  if(id.length<5){toast("הזינו תעודת זהות תקינה");return;}
+  if(!$("#su-city").value){toast("בחרו עיר");return;}
+  if(users[id]){toast("כבר קיים חשבון עם ת\"ז זו — היכנסו");go("login");return;}
+  const gender=($("#su-gender .opt.sel")||{}).dataset?.v||"";
+  const needs=$$("#su-needs .opt.sel").map(b=>b.dataset.need);
+  const lang=($("#su-lang .opt.sel")||{}).dataset?.lang||"";
+  users[id]={
+    id,name,phone:$("#su-phone").value.trim(),city:$("#su-city").value,
+    family:{gender,city:$("#su-city").value,requirements:lang,offeredSalary:+$("#su-bud").value,
+      needsHoist:needs.includes("hoist")?"yes":"no",needsDiapers:needs.includes("diapers")?"yes":"no",hasDementia:needs.includes("dementia")?"yes":"no"},
+    seen:[],liked:[],passed:[],matches:[],chats:{},createdAt:now()
+  };
+  saveUsers(); localStorage.setItem(SESS_KEY,id); me=users[id];
+  enterApp();
+}
+function doLogin(){
+  const name=$("#li-name").value.trim(), id=$("#li-id").value.replace(/\D/g,"");
+  const u=users[id];
+  if(!u){toast("לא נמצא חשבון — בדקו ת\"ז או הירשמו");return;}
+  if(u.name.trim()!==name){toast("השם אינו תואם לתעודת הזהות");return;}
+  localStorage.setItem(SESS_KEY,id); me=u; enterApp();
+}
+function logout(){localStorage.removeItem(SESS_KEY);me=null;go("welcome");}
+
+/* ============================================================
+   APP SHELL
+   ============================================================ */
+const TABS=[["discover","גלה",I.discover],["likes","לייקים",I.likes],["matches","מאצ'ים",I.match],["chats","צ'אט",I.chat],["profile","פרופיל",I.user]];
+function enterApp(){
+  caregivers=loadCaregivers();
   buildDeck();
-  if(!deck.length){toast("לא נמצאו התאמות — נסו להרחיב");return;}
-  idx=0; liked=[]; go("deck"); renderStack();
+  go("main"); switchTab("discover");
 }
+function renderNav(){
+  const unread=Object.values(me.chats||{}).reduce((n,arr)=>n+arr.filter(m=>m.from==="them"&&!m.read).length,0);
+  $("#nav").innerHTML=TABS.map(([id,label,icon])=>`
+    <button class="${curTab===id?"on":""}" data-tab="${id}">
+      ${curTab===id?svgF(icon,23):svg(icon,23)}<span>${label}</span>
+      ${id==="chats"&&unread?`<i class="dot">${unread}</i>`:""}
+      ${id==="matches"&&me.matches.length?`<i class="dot" style="background:var(--like)">${me.matches.length}</i>`:""}
+    </button>`).join("");
+  $$("#nav [data-tab]").forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
+}
+function switchTab(t){curTab=t;$("#topTitle").textContent=TABS.find(x=>x[0]===t)[1];renderNav();
+  ({discover:renderDiscover,likes:renderLikes,matches:renderMatches,chats:renderChats,profile:renderProfile}[t])();}
 
-/* ---------- deck ---------- */
+/* ---------- DISCOVER (deck) ---------- */
 function buildDeck(){
-  const pool=loadCaregivers();
   const scored=[];
-  pool.forEach(w=>{const m=scoreMatch(family,w); if(m!==null) scored.push({w,score:m.score,reasons:m.reasons});});
+  caregivers.forEach(w=>{
+    if(me.liked.includes(w.id)||me.passed.includes(w.id))return; // already decided
+    const m=scoreMatch(me.family,w); if(m!==null)scored.push({w,score:m.score,reasons:m.reasons});
+  });
   scored.sort((a,b)=>b.score-a.score);
-  deck=scored;
+  deck=scored;deckIdx=0;
 }
-function renderStack(){
-  const stack=$("#stack");
-  const rem=deck.length-idx;
-  $("#deckStep").textContent=rem>0?`${rem} התאמות`:"";
-  if(idx>=deck.length){
-    stack.innerHTML=`<div class="deck-empty">
-      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg></div>
-      <h3>${liked.length?"סיימתם לעבור על ההתאמות":"לא נותרו התאמות"}</h3>
-      <p>${liked.length?`אהבתם ${liked.length} מטפלים — בואו נסכם.`:"נסו סבב חדש או הרחיבו את הדרישות."}</p>
-      <button class="big-btn cool" style="width:auto;padding:0 26px;margin-top:14px" onclick="${liked.length?"go('shortlist');renderShortlist()":"restart()"}">${liked.length?"לסיכום ←":"סבב חדש"}</button>
-    </div>`;
-    $(".deck-actions").style.visibility="hidden";
-    return;
+function renderDiscover(){
+  const tab=$("#tab");tab.className="tab";
+  if(deckIdx>=deck.length){
+    tab.innerHTML=`<div class="empty">
+      <div class="ic">${svg(I.check,36)}</div>
+      <h3>עברת על כל ההתאמות</h3>
+      <p>${me.liked.length?`אהבת ${me.liked.length} מטפלים — הם בלשונית "לייקים".`:"נסה/י להרחיב את הדרישות בפרופיל."}</p>
+      <button class="big-btn cool" style="width:auto;padding:0 24px;margin-top:12px" onclick="${me.liked.length?"switchTab('likes')":"switchTab('profile')"}">${me.liked.length?"ללייקים ←":"לפרופיל"}</button>
+    </div>`;return;
   }
-  $(".deck-actions").style.visibility="visible";
-  // render up to 2 cards (top + next behind)
-  let html="";
-  for(let i=Math.min(idx+1,deck.length-1);i>=idx;i--){
-    const c=deck[i]; const w=c.w; const top=i===idx;
-    const pct=pctOf(c.score);
-    const scale=top?1:.94, ty=top?0:14;
-    html+=`<div class="card ${top?"top":""}" data-i="${i}" style="transform:scale(${scale}) translateY(${ty}px);z-index:${10-(i-idx)}">
-      <div class="photo" style="background:${gradFor(w.name)}">
-        <div class="init">${esc((w.name||"?")[0])}</div>
-        ${w.status==="זמין"?`<div class="avail"><span class="d"></span>פנוי/ה</div>`:""}
-        <div class="ring"><svg viewBox="0 0 64 64">
-          <circle class="rbg" cx="32" cy="32" r="27"/>
-          <circle class="rfg" cx="32" cy="32" r="27" stroke-dasharray="${2*Math.PI*27}" stroke-dashoffset="${2*Math.PI*27*(1-pct/100)}"/></svg>
-          <div class="rv"><div><b>${pct}%</b><span>התאמה</span></div></div></div>
-      </div>
-      <div class="info">
-        <h3>${esc(w.name)} ${esc(w.lastName||"")} <small>${esc(w.age||"")}</small></h3>
-        <div class="loc"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>${esc(w.city||"")} · ${esc(w.nationality||"")}</div>
-        <div class="badges">
-          ${w.canHoist==="yes"?`<span class="badge good">🛠️ מנוף</span>`:""}
-          ${w.knowsDementia==="yes"?`<span class="badge good">🧠 דמנציה</span>`:""}
-          ${w.canDiapers==="yes"?`<span class="badge good">🧴 טיפול אישי</span>`:""}
-          ${w.experience?`<span class="badge">${esc(w.experience)} שנ׳ ניסיון</span>`:""}
-          <span class="badge">${esc((w.languages||"").split(",")[0]||"")}</span>
-        </div>
-        <div class="reasons">
-          <div class="rt">למה זו התאמה טובה</div>
-          ${c.reasons.filter(r=>r).slice(0,3).map(r=>`<div class="reason"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>${esc(r)}</div>`).join("")}
-        </div>
-      </div>
-      <div class="stamp like">אהבתי</div>
-      <div class="stamp nope">דלג</div>
-    </div>`;
+  let html='<div class="deck-wrap"><div class="stack">';
+  for(let i=Math.min(deckIdx+1,deck.length-1);i>=deckIdx;i--){
+    html+=deckCard(deck[i],i===deckIdx);
   }
-  stack.innerHTML=html;
+  html+=`</div>
+    <div class="deck-actions">
+      <button class="act nope" onclick="swipe('nope')">${svg(I.x,26)}</button>
+      <button class="act info" onclick="openDetail(deck[deckIdx].w.id)">${svg(I.info,22)}</button>
+      <button class="act like" onclick="swipe('like')">${svgF(I.likes,32)}</button>
+    </div>
+    <div class="tap-hint">החלק/י או השתמש/י בכפתורים · הקש/י ⓘ לפרופיל המלא</div>
+  </div>`;
+  tab.innerHTML=html;
   bindDrag($(".card.top"));
 }
-
-/* ---------- drag / swipe ---------- */
-function bindDrag(card){
-  if(!card)return;
-  let sx=0,sy=0,dx=0,dy=0,drag=false;
-  const start=e=>{drag=true;card.style.transition="none";const p=pt(e);sx=p.x;sy=p.y;};
-  const move=e=>{if(!drag)return;const p=pt(e);dx=p.x-sx;dy=p.y-sy;
-    const rot=dx/14;
-    card.style.transform=`translate(${dx}px,${dy}px) rotate(${rot}deg)`;
-    const lk=$(".stamp.like",card),np=$(".stamp.nope",card);
-    if(lk)lk.style.opacity=Math.max(0,Math.min(1,dx/90));
-    if(np)np.style.opacity=Math.max(0,Math.min(1,-dx/90));
-    if(Math.abs(dx)>6&&e.cancelable)e.preventDefault();};
-  const end=()=>{if(!drag)return;drag=false;card.style.transition="transform .32s cubic-bezier(.2,.8,.2,1)";
-    if(dx>95){fling(card,1);decide("like");}
-    else if(dx<-95){fling(card,-1);decide("nope");}
-    else{card.style.transform="";const lk=$(".stamp.like",card),np=$(".stamp.nope",card);if(lk)lk.style.opacity=0;if(np)np.style.opacity=0;}
-    dx=dy=0;};
-  card.addEventListener("pointerdown",start);
-  window.addEventListener("pointermove",move,{passive:false});
-  window.addEventListener("pointerup",end);
-  card.addEventListener("touchmove",e=>{if(drag&&e.cancelable)e.preventDefault();},{passive:false});
-}
-const pt=e=>({x:e.clientX??(e.touches&&e.touches[0].clientX),y:e.clientY??(e.touches&&e.touches[0].clientY)});
-function fling(card,dir){card.style.transform=`translate(${dir*600}px,-40px) rotate(${dir*40}deg)`;card.style.opacity="0";}
-function swipe(kind){const card=$(".card.top");if(!card)return;
-  card.style.transition="transform .32s cubic-bezier(.2,.8,.2,1)";
-  fling(card,kind==="like"?1:-1);decide(kind);}
-function decide(kind){
-  const c=deck[idx];
-  if(kind==="like"&&c){liked.push(c);toast("נוסף לרשימה ♥");}
-  idx++;
-  setTimeout(renderStack,300);
-  if(liked.length>=5&&kind==="like"){setTimeout(()=>{go("shortlist");renderShortlist();},600);}
-}
-function showDetail(){const c=deck[idx];if(!c)return;
-  const w=c.w;toast(`${w.name} · ${w.experience||"?"} שנות ניסיון · ${money(w.expectedSalary)}`);}
-
-/* ---------- shortlist ---------- */
-function renderShortlist(){
-  const b=$("#slBody");
-  if(!liked.length){b.innerHTML=`<div class="sl-hero"><h2>עדיין לא בחרתם</h2><p>חזרו והחליקו ♥ על מטפלים שאהבתם.</p></div>`;return;}
-  b.innerHTML=`
-    <div class="sl-hero">
-      <div class="v"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg></div>
-      <h2>בחרתם ${liked.length} מטפלים</h2>
-      <p>רכז/ת מעוגן יאשר/תאשר את ההתאמות ותיצור קשר לתיאום ראיון. אפשר לשנות בכל שלב.</p>
+function deckCard(c,top){
+  const w=c.w,pct=pctOf(c.score);
+  const photo=w.photo?`<img src="${esc(w.photo)}" alt="">`:`<div class="init">${esc((w.name||"?")[0])}</div>`;
+  return `<div class="card ${top?"top":""}" style="${top?"":"transform:scale(.94) translateY(12px);"}z-index:${top?2:1}">
+    <div class="photo" style="background:${gradFor(w.name)}">
+      ${photo}
+      ${w.video?`<button class="vbtn" onclick="event.stopPropagation();playVideo('${w.id}')">${svgF(I.play,20)}</button>`:""}
+      <div class="avail"><span class="d"></span>פנוי/ה</div>
+      <div class="pct"><b>${pct}%</b><span>התאמה</span></div>
+      <div class="pdata"><h3>${esc(w.name)} ${esc(w.lastName||"")} <small>${esc(w.age||"")}</small></h3>
+        <div class="loc">${svg(I.loc,14)}${esc(w.city||"")} · ${esc(w.nationality||"")}</div></div>
     </div>
-    ${liked.map(c=>{const w=c.w;return `<div class="sl-card">
-      <div class="av" style="background:${gradFor(w.name)}">${esc((w.name||"?")[0])}</div>
-      <div class="m"><b>${esc(w.name)} ${esc(w.lastName||"")}</b><span>${esc(w.city||"")} · ${esc(w.nationality||"")} · ${money(w.expectedSalary)}</span></div>
-      <div class="pc">${pctOf(c.score)}%</div>
-    </div>`;}).join("")}`;
+    <div class="body">
+      <div class="chips">
+        ${w.canHoist==="yes"?'<span class="chip good">🛠️ מנוף</span>':""}
+        ${w.knowsDementia==="yes"?'<span class="chip good">🧠 דמנציה</span>':""}
+        ${w.experience?`<span class="chip">${esc(w.experience)} שנ׳ ניסיון</span>`:""}
+        <span class="chip">⭐ ${esc(w.rating)}</span>
+      </div>
+      <div class="reasons">${c.reasons.slice(0,3).map(r=>`<div class="r">${svg(I.check,15)}${esc(r)}</div>`).join("")}</div>
+    </div>
+    <div class="stamp like">אהבתי</div><div class="stamp nope">דלג</div>
+  </div>`;
 }
-function sendToOgen(){
-  // integration point: write the family request + likes back to the shared CRM store as a lead
-  try{
-    const raw=localStorage.getItem("ogenCRM3"); const db=raw?JSON.parse(raw):{leads:[],workers:[],matches:[],staff:[],templates:[]};
-    db.leads=db.leads||[];
-    const uid="lead_"+Date.now().toString(36);
-    db.leads.push({id:uid,date:new Date().toISOString(),status:"הוצע עובד",assignedTo:"חיבור בקליק",source:"אפליקציית משפחה",
-      patientName:"בקשת משפחה",patientLastName:family.city,gender:family.gender,city:family.city,area:family.area||"1",
-      needsHoist:family.needsHoist,needsDiapers:family.needsDiapers,hasDementia:family.hasDementia,offeredSalary:family.offeredSalary,
-      requirements:family.requirements,temperature:"hot",starred:true,tags:["חיבור בקליק"],notes:"נוצר מאפליקציית המשפחה",
-      followUpDate:"",contactName:"",contactRelation:"",contactPhone:"",activities:[{id:"a"+Date.now(),text:`המשפחה סימנה ${liked.length} מטפלים: ${liked.map(c=>c.w.name).join(", ")}`,by:"חיבור בקליק",at:new Date().toISOString()}],
-      proposedWorkerIds:[], lastEditedBy:"חיבור בקליק",lastEditedAt:new Date().toISOString(),_deleted:false});
-    localStorage.setItem("ogenCRM3",JSON.stringify(db));
-  }catch(e){}
-  localStorage.setItem("hiburLast",JSON.stringify({family,liked:liked.map(c=>c.w.name),at:Date.now()}));
-  toast("נשלח לעוגן ✓ ניצור קשר בקרוב");
-  setTimeout(()=>{$("#slBody").innerHTML=`<div class="sl-hero" style="margin-top:40px">
-    <div class="v"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></div>
-    <h2>הבקשה נשלחה! 🎉</h2><p>רכז/ת מעוגן יבדוק/תבדוק את ההתאמות ותיצור קשר לתיאום ראיון עם המטפלים שבחרתם.</p></div>`;},400);
+/* drag */
+function bindDrag(card){
+  if(!card)return;let sx,sy,dx=0,drag=false;
+  const start=e=>{drag=true;card.style.transition="none";const p=pt(e);sx=p.x;sy=p.y;};
+  const move=e=>{if(!drag)return;const p=pt(e);dx=p.x-sx;const dy=p.y-sy;
+    card.style.transform=`translate(${dx}px,${dy}px) rotate(${dx/16}deg)`;
+    const lk=$(".stamp.like",card),np=$(".stamp.nope",card);
+    if(lk)lk.style.opacity=Math.max(0,Math.min(1,dx/90));if(np)np.style.opacity=Math.max(0,Math.min(1,-dx/90));
+    if(Math.abs(dx)>6&&e.cancelable)e.preventDefault();};
+  const end=()=>{if(!drag)return;drag=false;card.style.transition="transform .3s cubic-bezier(.2,.8,.2,1)";
+    if(dx>95){fling(card,1);decide("like");}else if(dx<-95){fling(card,-1);decide("nope");}
+    else{card.style.transform="";$$(".stamp",card).forEach(s=>s.style.opacity=0);}dx=0;};
+  card.addEventListener("pointerdown",start);window.addEventListener("pointermove",move,{passive:false});window.addEventListener("pointerup",end);
 }
-function restart(){family={gender:"",city:"",area:"",needsHoist:"",needsDiapers:"",hasDementia:"",offeredSalary:5800,requirements:""};
-  deck=[];idx=0;liked=[];go("welcome");}
+const pt=e=>({x:e.clientX,y:e.clientY});
+function fling(card,d){card.style.transform=`translate(${d*600}px,-40px) rotate(${d*40}deg)`;card.style.opacity="0";}
+function swipe(kind){const card=$(".card.top");if(!card)return;card.style.transition="transform .3s cubic-bezier(.2,.8,.2,1)";fling(card,kind==="like"?1:-1);decide(kind);}
+function decide(kind){
+  const c=deck[deckIdx];if(!c)return;const w=c.w;
+  if(!me.seen.includes(w.id))me.seen.push(w.id);
+  if(kind==="like"){me.liked.push(w.id);maybeMatch(w,c.score);toast("נוסף ללייקים ♥");}
+  else me.passed.push(w.id);
+  saveUsers();deckIdx++;
+  setTimeout(()=>{renderDiscover();renderNav();},300);
+}
+/* simulate mutual interest: ~55% of likes "like back" → match (real: caregiver app / coordinator) */
+function maybeMatch(w,score){
+  const hash=[...w.id].reduce((a,c)=>a+c.charCodeAt(0),0);
+  if((hash+score)%100<72){
+    me.matches.push({id:w.id,at:now(),score});
+    me.chats[w.id]=me.chats[w.id]||[];
+    setTimeout(()=>showMatchModal(w),650);
+  }
+}
+function showMatchModal(w){
+  $("#modalRoot").innerHTML=`<div class="scrim" onclick="if(event.target===this)this.remove()"><div class="modal match-anim">
+    <div class="mi" style="background:var(--like-soft)">${svgF(I.likes,34)+`<style>.mi svg{color:var(--like)}</style>`}</div>
+    <h3>יש התאמה! 🎉</h3>
+    <p><b>${esc(w.name)}</b> מעוניין/ת גם! אפשר להתחיל לשוחח ולתאם היכרות.</p>
+    <button class="big-btn cool" onclick="$('#modalRoot').innerHTML='';openChat('${w.id}')">שלח/י הודעה 💬</button>
+    <button class="big-btn dark" style="margin-top:9px;background:transparent;color:var(--ink-3);box-shadow:none" onclick="$('#modalRoot').innerHTML=''">אחר כך</button>
+  </div></div>`;
+  renderNav();
+}
+function playVideo(id){const w=cgById(id);
+  $("#modalRoot").innerHTML=`<div class="scrim" onclick="if(event.target===this)this.remove()"><div class="modal">
+    <div class="mi" style="background:var(--mist)">${svgF(I.play,30)}</div>
+    <h3>סרטון היכרות</h3>
+    <p>סרטון ההיכרות של ${esc(w.name)} יופיע כאן. בשלב הבא — הרכז/המטפל מעלים סרטון אמיתי (אחסון ענן).</p>
+    <button class="big-btn cool" onclick="$('#modalRoot').innerHTML=''">סגור</button>
+  </div></div>`;
+}
+
+/* ---------- CAREGIVER DETAIL ---------- */
+function openDetail(id){detailId=id;const w=cgById(id);const c={w,...scoreMatch(me.family,w)};const pct=pctOf(c.score||0);
+  const liked=me.liked.includes(id);
+  const photo=w.photo?`<img src="${esc(w.photo)}">`:`<div class="init">${esc((w.name||"?")[0])}</div>`;
+  $("#detail").innerHTML=`
+    <div class="d-hero" style="background:${gradFor(w.name)}">
+      ${photo}
+      <button class="d-back" onclick="go('main')">→</button>
+      ${w.video?`<button class="d-vbtn" onclick="playVideo('${id}')">${svg(I.play,17)} סרטון</button>`:""}
+      <div class="d-name"><h2>${esc(w.name)} ${esc(w.lastName||"")} <small>${esc(w.age||"")}</small></h2>
+        <div class="loc">${esc(w.city||"")} · ${esc(w.nationality||"")} · ⭐ ${esc(w.rating)}</div></div>
+    </div>
+    <div class="d-body">
+      <div class="d-pct"><div class="big">${pct}%</div><div class="tx">${c.reasons?c.reasons.slice(0,2).join(" · "):"התאמה"}</div></div>
+      <div class="d-sec"><h4>יכולות טיפול</h4><div class="chips">
+        ${w.canHoist==="yes"?'<span class="chip good">🛠️ מנוף והרמה</span>':""}
+        ${w.canDiapers==="yes"?'<span class="chip good">🧴 טיפול אישי</span>':""}
+        ${w.knowsDementia==="yes"?'<span class="chip good">🧠 דמנציה/אלצהיימר</span>':""}
+      </div></div>
+      <div class="d-sec"><h4>פרטים</h4><div class="d-grid">
+        <div class="d-item"><div class="k">ניסיון</div><div class="v">${esc(w.experience||"—")} שנים</div></div>
+        <div class="d-item"><div class="k">שפות</div><div class="v" style="font-size:13px">${esc(w.languages||"—")}</div></div>
+        <div class="d-item"><div class="k">ציפיית שכר</div><div class="v">${money(w.expectedSalary)}</div></div>
+        <div class="d-item"><div class="k">זמינות</div><div class="v">${esc(w.status||"—")}</div></div>
+      </div></div>
+      <div class="d-sec"><h4>תחביבים</h4><div class="chips">${(w.hobbies||[]).map(h=>`<span class="chip">${esc(h)}</span>`).join("")}</div></div>
+      <div class="d-sec"><h4>המלצות</h4>${(w.recs||[]).map(r=>`<div class="rec"><div class="who">${esc(r.who)} <span class="stars">${"★".repeat(r.stars)}</span></div>${esc(r.text)}</div>`).join("")}</div>
+    </div>
+    <div class="d-foot">
+      <button class="big-btn pass" onclick="detailDecide('nope')">${svg(I.x,22)}</button>
+      <button class="big-btn ${liked?"cool":""}" onclick="${liked?`openChatOrWa('${id}')`:`detailDecide('like')`}">${liked?"שלח/י הודעה 💬":"אהבתי ♥"}</button>
+    </div>`;
+  go("detail");
+}
+function detailDecide(kind){const id=detailId;const w=cgById(id);
+  if(!me.seen.includes(id))me.seen.push(id);
+  if(kind==="like"){if(!me.liked.includes(id)){me.liked.push(id);maybeMatch(w,scoreMatch(me.family,w).score||100);}toast("נוסף ללייקים ♥");}
+  else{if(!me.passed.includes(id))me.passed.push(id);}
+  // remove from deck
+  deck=deck.filter(x=>x.w.id!==id);if(deckIdx>deck.length)deckIdx=deck.length;
+  saveUsers();go("main");switchTab(kind==="like"&&me.matches.some(m=>m.id===id)?"matches":curTab==="discover"?"discover":curTab);
+}
+function openChatOrWa(id){ if(me.matches.some(m=>m.id===id)) openChat(id); else toast("נמתין שהמטפל/ת יאשר/תאשר — נעדכן אותך"); }
+
+/* ---------- LIKES ---------- */
+function renderLikes(){const tab=$("#tab");tab.className="tab pad";
+  if(!me.liked.length){tab.innerHTML=emptyState(I.likes,"עדיין לא אהבת אף אחד","חזור/י ל\"גלה\" והחלק/י ♥ על מטפלים שמוצאים חן");return;}
+  tab.innerHTML=`<div class="list-head">אהבת ${me.liked.length} מטפלים</div>`+
+    me.liked.map(id=>{const w=cgById(id);if(!w)return"";const matched=me.matches.some(m=>m.id===id);
+      return rowFor(w,`onclick="openDetail('${id}')"`,matched?`<span class="badge-match">מאצ' ✓</span>`:`<span class="badge-wait">ממתין</span>`);
+    }).join("");
+}
+/* ---------- MATCHES ---------- */
+function renderMatches(){const tab=$("#tab");tab.className="tab pad";
+  if(!me.matches.length){tab.innerHTML=emptyState(I.match,"אין מאצ'ים עדיין","כשמטפל/ת שאהבת מעוניין/ת גם — הוא/היא יופיעו כאן ותוכל/י לשוחח");return;}
+  tab.innerHTML=`<div class="list-head">${me.matches.length} מאצ'ים</div><div class="list-sub">התאמה הדדית — אפשר לשוחח ולתאם היכרות.</div>`+
+    me.matches.slice().sort((a,b)=>b.at-a.at).map(mm=>{const w=cgById(mm.id);if(!w)return"";
+      return rowFor(w,`onclick="openChat('${mm.id}')"`,`<button class="big-btn cool" style="width:auto;height:38px;padding:0 16px;font-size:13px">שוחח/י 💬</button>`,true);
+    }).join("");
+}
+/* ---------- CHATS list ---------- */
+function renderChats(){const tab=$("#tab");tab.className="tab pad";
+  const ids=Object.keys(me.chats||{}).filter(id=>me.chats[id].length);
+  if(!ids.length){tab.innerHTML=emptyState(I.chat,"אין שיחות עדיין","התחל/י שיחה מתוך מאצ' — וההתכתבות גם תישלח לוואטסאפ של המטפל/ת");return;}
+  tab.innerHTML=`<div class="list-head">שיחות</div>`+
+    ids.sort((a,b)=>last(me.chats[b]).at-last(me.chats[a]).at).map(id=>{const w=cgById(id);if(!w)return"";
+      const msgs=me.chats[id];const lm=last(msgs);const unread=msgs.filter(m=>m.from==="them"&&!m.read).length;
+      return `<div class="list-row" onclick="openChat('${id}')">
+        ${avEl(w)}
+        <div class="m"><b>${esc(w.name)} ${esc(w.lastName||"")}</b><span>${esc(lm.text)}</span></div>
+        <div class="side"><div class="time">${timeStr(lm.at)}</div>${unread?`<span class="badge-match" style="margin-top:5px;display:inline-block">${unread}</span>`:""}</div>
+      </div>`;
+    }).join("");
+}
+const last=a=>a[a.length-1];
+function rowFor(w,attr,side,online){return `<div class="list-row" ${attr}>
+  ${avEl(w,online)}
+  <div class="m"><b>${esc(w.name)} ${esc(w.lastName||"")}</b><span>${esc(w.city||"")} · ${esc(w.nationality||"")} · ${money(w.expectedSalary)}</span></div>
+  <div class="side">${side||`<div class="pc">${pctOf(scoreMatch(me.family,w)?.score||0)}%</div>`}</div>
+</div>`;}
+function avEl(w,online){const inner=w.photo?`<img src="${esc(w.photo)}">`:esc((w.name||"?")[0]);
+  return `<div class="av" style="background:${gradFor(w.name)}">${inner}${online?'<span class="on-dot"></span>':""}</div>`;}
+function emptyState(icon,h,p){return `<div class="empty" style="position:static;height:100%"><div class="ic">${svg(icon,36)}</div><h3>${h}</h3><p>${p}</p></div>`;}
+
+/* ---------- CHAT THREAD ---------- */
+function openChat(id){chatId=id;const w=cgById(id);me.chats[id]=me.chats[id]||[];
+  // mark read
+  me.chats[id].forEach(m=>{if(m.from==="them")m.read=true;});saveUsers();
+  renderChatThread(w);go("chat-thread");renderNav();
+}
+function renderChatThread(w){
+  const msgs=me.chats[w.id];
+  $("#chat-thread").innerHTML=`
+    <div class="ct-head">
+      <button class="back" onclick="go('main');switchTab('chats')">→</button>
+      ${avEl(w)}
+      <div class="who"><b>${esc(w.name)} ${esc(w.lastName||"")}</b><span>מקוון/ת</span></div>
+      <a class="wa" href="${waLink(w.phone)}" target="_blank" title="פתח בוואטסאפ">${svgF(I.wa,22)}</a>
+    </div>
+    <div class="ct-body" id="ctBody">
+      ${msgs.length?msgs.map(m=>bubble(m)).join(""):`<div class="wa-note">זו תחילת השיחה עם ${esc(w.name)}. ההודעות יישלחו גם לוואטסאפ שלה/ו.</div>`}
+    </div>
+    <div class="ct-foot">
+      <input id="ctInput" placeholder="הקלד/י הודעה…" onkeydown="if(event.key==='Enter')sendMsg()">
+      <button class="send" onclick="sendMsg()">${svg(I.send,20)}</button>
+    </div>`;
+  const b=$("#ctBody");b.scrollTop=b.scrollHeight;
+}
+function bubble(m){return `<div class="bub ${m.from==="me"?"me":"them"}">${esc(m.text)}<time>${timeStr(m.at)}${m.from==="me"?` <span class="rr">${m.read?"✓✓":"✓"}</span>`:""}</time></div>`;}
+function sendMsg(){const inp=$("#ctInput");const t=inp.value.trim();if(!t)return;inp.value="";
+  const w=cgById(chatId);me.chats[chatId].push({from:"me",text:t,at:now(),read:false});saveUsers();
+  renderChatThread(w);
+  // simulate WhatsApp-bridged reply (real: WhatsApp Business API via automation)
+  setTimeout(()=>{
+    if(!me.chats[chatId])return;
+    const replies=["שלום! תודה על הפנייה 😊 אשמח להכיר.","כן, אני פנויה להתחיל. מתי נוח לכם לשוחח?","בטח, יש לי ניסיון עם זה. אפשר לתאם היכרות?"];
+    const r=replies[me.chats[chatId].filter(m=>m.from==="me").length%replies.length];
+    me.chats[chatId].push({from:"them",text:r,at:now(),read:$("#chat-thread").classList.contains("on")});saveUsers();
+    if($("#chat-thread").classList.contains("on")&&chatId===w.id)renderChatThread(w);
+    renderNav();
+  },1400+Math.random()*900);
+}
+
+/* ---------- PROFILE (self) ---------- */
+function renderProfile(){const tab=$("#tab");tab.className="tab";
+  const f=me.family;
+  tab.innerHTML=`
+    <div class="p-head"><div class="pav">${esc((me.name||"?")[0])}</div><h2>${esc(me.name)}</h2><span>${esc(me.city)} · ת"ז ${esc(me.id)}</span></div>
+    <div class="p-stats">
+      <div class="p-stat"><b>${me.seen.length}</b><span>נצפו</span></div>
+      <div class="p-stat"><b>${me.liked.length}</b><span>לייקים</span></div>
+      <div class="p-stat"><b>${me.matches.length}</b><span>מאצ'ים</span></div>
+    </div>
+    <div style="padding:6px 16px 20px">
+      <div class="section-t">מה חיפשתם</div>
+      <div class="d-grid">
+        <div class="d-item"><div class="k">מטפל/ת</div><div class="v">${f.gender==="female"?"מטפלת":f.gender==="male"?"מטפל":"לא משנה"}</div></div>
+        <div class="d-item"><div class="k">תקציב</div><div class="v">${money(f.offeredSalary)}</div></div>
+        <div class="d-item"><div class="k">צרכים</div><div class="v" style="font-size:12.5px">${[f.needsHoist==="yes"?"מנוף":"",f.hasDementia==="yes"?"דמנציה":"",f.needsDiapers==="yes"?"טיפול אישי":""].filter(Boolean).join(", ")||"—"}</div></div>
+        <div class="d-item"><div class="k">שפה</div><div class="v">${f.requirements||"לא משנה"}</div></div>
+      </div>
+      <button class="big-btn" style="margin-top:18px;background:var(--paper);color:var(--anchor);border:1.5px solid var(--line);box-shadow:none" onclick="resetSeen()">אפס/י התאמות שנצפו (התחל/י מחדש)</button>
+      <button class="big-btn" style="margin-top:10px;background:transparent;color:var(--nope);box-shadow:none" onclick="logout()">${svg(I.logout,18)} התנתקות</button>
+    </div>`;
+}
+function resetSeen(){me.passed=[];buildDeck();saveUsers();toast("אופס — כל ההתאמות שוב זמינות");switchTab("discover");}
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+function init(){
+  loadUsers();
+  fillSignupForm();
+  const sid=localStorage.getItem(SESS_KEY);
+  if(sid&&users[sid]){me=users[sid];enterApp();}
+  else go("welcome");
+}
+init();
 </script>
 </body>
 </html>
