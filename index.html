@@ -1390,9 +1390,69 @@ function renderInterviews(v){
         </div>
       </div>
     </div>
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="hd">${svg(I.brain,18)}<h3>בריף יומי — חיבור בקליק</h3>
+      <button class="btn sm ghost" style="margin-inline-start:auto" onclick="loadHiburDigest()">${svg(I.chat,14)}רענן</button></div>
+    <div class="bd" style="padding:20px" id="hiburDigest">
+      <div class="empty" style="padding:20px">${svg(I.brain,36)}<h3>טוען נתונים…</h3></div>
+    </div>
   </div>`;
   drawQR($("#qrBox"),link);
   drawQR($("#familyQr"),familyLink);
+  loadHiburDigest();
+}
+
+/* ---------- חיבור בקליק daily digest for coordinator ---------- */
+let hiburFdb=null;
+function initHiburRead(){
+  if(hiburFdb)return hiburFdb;
+  try{
+    if(typeof firebase==="undefined")return null;
+    if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);
+    hiburFdb=firebase.firestore();
+    return hiburFdb;
+  }catch(e){console.warn("hibur read init",e);return null;}
+}
+async function loadHiburDigest(){
+  const box=$("#hiburDigest"); if(!box)return;
+  const fdb2=initHiburRead();
+  if(!fdb2){box.innerHTML=`<div class="empty" style="padding:20px">${svg(I.alert,36)}<h3>אין חיבור לענן</h3><p>הפעילו סנכרון בהגדרות</p></div>`;return;}
+  box.innerHTML=`<div class="empty" style="padding:20px">${svg(I.brain,36)}<h3>טוען נתונים…</h3></div>`;
+  try{
+    const todayStart=new Date();todayStart.setHours(0,0,0,0);const cutoff=todayStart.getTime();
+    const [famsSnap,cgsSnap,connsSnap]=await Promise.all([
+      fdb2.collection("hibur").get(), fdb2.collection("hibur_cg").get(), fdb2.collection("hibur_conn").get()
+    ]);
+    const fams=famsSnap.docs.map(d=>d.data()), cgs=cgsSnap.docs.map(d=>d.data()), conns=connsSnap.docs.map(d=>d.data());
+    const newFams=fams.filter(f=>(f.createdAt||0)>=cutoff);
+    const newCgs=cgs.filter(c=>(c.createdAt||0)>=cutoff);
+    const matchesToday=conns.filter(c=>c.famLiked&&c.cgLiked&&(c.updatedAt||0)>=cutoff);
+    const allMatches=conns.filter(c=>c.famLiked&&c.cgLiked);
+    const pending=conns.filter(c=>c.famLiked&&!c.cgLiked);
+    const msgsToday=conns.reduce((n,c)=>n+((c.msgs||[]).filter(m=>(m.at||0)>=cutoff).length),0);
+    const stats=[
+      ["משפחות חדשות היום",newFams.length],["מטפלים חדשים היום",newCgs.length],
+      ["מאצ'ים היום",matchesToday.length],["הודעות היום",msgsToday],
+      ["סה״כ מאצ'ים פעילים",allMatches.length],["ממתינים לתגובת מטפל",pending.length],
+    ];
+    const statsHtml=`<div class="d-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
+      ${stats.map(([k,v])=>`<div class="d-item" style="background:var(--mist);border-radius:12px;padding:12px"><div class="k" style="font-size:11px;color:var(--ink-3)">${k}</div><div class="v num" style="font-size:20px;font-weight:800;color:var(--sea-950)">${v}</div></div>`).join("")}
+    </div>`;
+    box.innerHTML=statsHtml+(hasAI()?`<div id="hiburNarrative" style="display:flex;align-items:center;gap:8px;color:var(--ink-3);font-size:13px"><div style="width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--anchor);border-radius:50%;animation:spin .7s linear infinite"></div>מנסח בריף…</div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>`:"");
+    if(hasAI()&&(fams.length||cgs.length)){
+      const prompt=`נתוני "חיבור בקליק" (פלטפורמת התאמת מטפלים) להיום:
+משפחות חדשות: ${newFams.length} (סה״כ ${fams.length}). מטפלים חדשים: ${newCgs.length} (סה״כ ${cgs.length}).
+מאצ'ים חדשים היום: ${matchesToday.length} (סה״כ ${allMatches.length}). הודעות שנשלחו היום: ${msgsToday}.
+פניות ממתינות לתגובת מטפל: ${pending.length}.
+כתוב/כתבי בריף קצר (2-3 משפטים) לרכז/ת עוגן על מצב המערכת היום, בעברית, בגוף שני. אם יש הרבה פניות ממתינות — ציין/ציני זאת כדבר לטפל בו.`;
+      try{
+        const text=await callAI([{role:"user",content:prompt}],"את/ה עוזר/ת לרכז השמה. תשובה קצרה, ענינית, בלי כותרות.");
+        const n=$("#hiburNarrative"); if(n&&text)n.outerHTML=`<div style="background:var(--like-soft,#DCF2EA);border-radius:12px;padding:13px 15px;font-size:14px;line-height:1.6;color:var(--ink)">✨ ${esc(text)}</div>`;
+        else if(n)n.remove();
+      }catch(e){const n=$("#hiburNarrative");if(n)n.remove();console.warn("digest AI",e);}
+    }
+  }catch(e){console.warn("hibur digest",e);box.innerHTML=`<div class="empty" style="padding:20px">${svg(I.alert,36)}<h3>שגיאה בטעינת נתונים</h3></div>`;}
 }
 function openInterviewPreview(){ window.open(location.pathname+"?mode=interview","_blank"); }
 

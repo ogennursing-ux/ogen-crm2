@@ -179,6 +179,28 @@ function uploadToCloudinary(fileOrBlob,{onProgress}={}){
 const connCol=()=>fdb.collection("hibur_conn");
 const AU=x=>firebase.firestore.FieldValue.arrayUnion(x);
 
+/* ---------- Gemini AI (shared key with family app, same origin) ---------- */
+const AI_MODEL="gemini-flash-latest";
+const getAIKey=()=>(localStorage.getItem("hbGeminiKey")||"").trim();
+const hasAI=()=>!!getAIKey();
+async function callAI(prompt,system){
+  const key=getAIKey(); if(!key)throw new Error("no-key");
+  const body={contents:[{role:"user",parts:[{text:prompt}]}]};
+  if(system)body.systemInstruction={parts:[{text:system}]};
+  const ctrl=new AbortController();const to=setTimeout(()=>ctrl.abort(),25000);
+  const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${encodeURIComponent(key)}`,
+    {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:ctrl.signal});
+  clearTimeout(to);
+  if(!r.ok)throw new Error("AI "+r.status);
+  const d=await r.json();
+  return ((d.candidates&&d.candidates[0]&&d.candidates[0].content&&d.candidates[0].content.parts)||[]).map(p=>p.text||"").join("").trim();
+}
+async function translateMsg(text,targetLang){
+  if(!hasAI()||!text.trim())return null;
+  try{return await callAI(text,`Translate the user's message into ${targetLang}. Reply with ONLY the translation, nothing else — no quotes, no explanation, no original text.`);}
+  catch(e){console.warn("translate",e);return null;}
+}
+
 /* ---------- state ---------- */
 let me=null, curTab="profile", conns=[], connUnsub=null, chatConn=null;
 const SESS="hbcg_session";
@@ -256,9 +278,32 @@ function renderProfile(){const tab=$("#tab");tab.className="tab";const w=me;
       <div class="field"><label>מנוף/הרמה</label>${yn("hoist",w.canHoist)}</div>
       <div class="field"><label>טיפול אישי (חיתולים)</label>${yn("diapers",w.canDiapers)}</div>
       <div class="field"><label>ניסיון עם דמנציה/אלצהיימר</label>${yn("dementia",w.knowsDementia)}</div>
-      <button class="big-btn cool" onclick="saveProfile()">שמירת פרופיל</button>
-      <button class="big-btn" style="margin-top:10px;background:transparent;color:var(--nope);box-shadow:none" onclick="logout()">${svg(I.logout,18)} התנתקות</button>
+      <div class="section-t">קצת על עצמך</div>
+      <div class="field"><label>ספר/י בחופשיות — תחביבים, ניסיון, למה את/ה טוב/ה במה שאת/ה עושה</label>
+        <textarea id="f-about" placeholder="למשל: אוהבת לבשל, סבלנית מאוד, טיפלתי בסבתא שלי 3 שנים...">${esc(w.about||"")}</textarea></div>
+      ${hasAI()?`<button class="big-btn" style="background:var(--like-soft);color:var(--like);box-shadow:none" onclick="generateBio()">✨ נסח/י לי תיאור מקצועי עם AI</button>`:""}
+      ${w.bio?`<div class="rec" style="margin-top:10px;background:var(--like-soft)"><div class="who" style="color:var(--like)">התיאור שהמשפחות רואות</div>${esc(w.bio)}</div>`:""}
+      <button class="big-btn cool" style="margin-top:14px" onclick="saveProfile()">שמירת פרופיל</button>
+      <div class="section-t">בינה מלאכותית (AI)</div>
+      <p style="font-size:12px;color:var(--ink-3);margin-bottom:8px;line-height:1.5">מפתח Gemini מפעיל תרגום אוטומטי בצ'אט ועיצוב תיאור מקצועי. אותו מפתח כמו באפליקציית המשפחה.</p>
+      <div class="field"><input id="geminiKeyInput" type="password" placeholder="מפתח Gemini API (AIza...)" value="${esc(getAIKey())}" dir="ltr" style="text-align:left;font-size:13px"></div>
+      <button class="big-btn" style="background:var(--paper);border:1.5px solid var(--line);box-shadow:none;color:var(--ink-2)" onclick="saveGeminiKey()">שמירת מפתח</button>
+      <button class="big-btn" style="margin-top:14px;background:transparent;color:var(--nope);box-shadow:none" onclick="logout()">${svg(I.logout,18)} התנתקות</button>
     </div>`;
+}
+function saveGeminiKey(){const v=$("#geminiKeyInput").value.trim();localStorage.setItem("hbGeminiKey",v);toast(v?"מפתח נשמר — AI פעיל ✓":"המפתח הוסר");renderProfile();}
+async function generateBio(){
+  const about=($("#f-about")||{}).value||me.about||"";
+  if(!about.trim()){toast("כתוב/כתבי קודם כמה מילים על עצמך למעלה");return;}
+  toast("מנסח…");
+  try{
+    const bio=await callAI(
+      `שם: ${me.name||"מטפל/ת"}, לאום: ${me.nationality||"—"}, ניסיון: ${me.experience||"—"} שנים, שפות: ${me.languages||"—"}.\n`+
+      `מה שהמטפל/ת כתב/ה על עצמו/ה: "${about}"\n\nנסח/י מזה תיאור קצר (2-3 משפטים) חם ומקצועי בעברית, בגוף שלישי, שמציג את המטפל/ת למשפחות. בלי הגזמות, בלי כותרות.`,
+      "את/ה כותב/ת קופי מקצועי לפרופילי מטפלים באפליקציית התאמה. תשובה קצרה וחמה בלבד, בלי מירכאות."
+    );
+    if(bio){me.about=about;me.bio=bio;saveMe();toast("התיאור נוצר ✓");renderProfile();}
+  }catch(e){toast("שגיאה — נסו שוב");console.warn(e);}
 }
 const yn=(k,v)=>`<div class="opts" id="yn-${k}">${[["yes","כן"],["no","לא"]].map(([val,l])=>`<button class="opt ${v===val?"sel":""}" data-v="${val}" onclick="pickYN('${k}','${val}')">${l}</button>`).join("")}</div>`;
 let ynState={};
@@ -268,6 +313,7 @@ function saveProfile(){
   me.age=$("#f-age").value; me.city=$("#f-city").value; me.phone=$("#f-phone").value.trim();
   me.languages=$("#f-lang").value.trim(); me.experience=$("#f-exp").value; me.expectedSalary=+$("#f-sal").value||0;
   me.canHoist=ynState.hoist||me.canHoist; me.canDiapers=ynState.diapers||me.canDiapers; me.knowsDementia=ynState.dementia||me.knowsDementia;
+  me.about=($("#f-about")||{}).value||me.about||"";
   saveMe(); toast("הפרופיל נשמר ✓"); renderProfile();
 }
 /* photo upload → resize client-side → upload to Cloudinary → store secure_url */
@@ -364,12 +410,22 @@ function renderChat(c){const f=c.fam||{};const msgs=c.msgs||[];
     <div class="ct-head"><button class="back" onclick="go('main');switchTab('chats')">→</button>
       <div class="av" style="width:40px;height:40px;border-radius:50%;font-size:16px">${esc((f.name||"?")[0])}</div>
       <div class="who"><b>${esc(f.name||"משפחה")}</b><span>${esc(f.city||"")}</span></div></div>
-    <div class="ct-body" id="ctBody">${msgs.length?msgs.map(m=>`<div class="bub ${m.from==="cg"?"me":"them"}">${esc(m.text)}<time>${timeStr(m.at)}</time></div>`).join(""):`<div style="text-align:center;color:var(--ink-3);font-size:12px;padding:8px">תחילת השיחה עם ${esc(f.name||"המשפחה")}</div>`}</div>
+    <div class="ct-body" id="ctBody">${msgs.length?msgs.map(bubble).join(""):`<div style="text-align:center;color:var(--ink-3);font-size:12px;padding:8px">תחילת השיחה עם ${esc(f.name||"המשפחה")}</div>`}</div>
     <div class="ct-foot"><input id="ctInput" placeholder="הקלד/י הודעה…" onkeydown="if(event.key==='Enter')sendMsg()"><button class="send" onclick="sendMsg()">${svg(I.send,20)}</button></div>`;
   const b=$("#ctBody");b.scrollTop=b.scrollHeight;
 }
-function sendMsg(){const inp=$("#ctInput");const t=inp.value.trim();if(!t||!chatConn)return;inp.value="";
+function bubble(m){
+  const mine=m.from==="cg";
+  const primary=mine?m.text:(m.translated||m.text);
+  const secondary=mine?m.translated:(m.translated?m.text:null);
+  return `<div class="bub ${mine?"me":"them"}">${esc(primary)}
+    ${secondary?`<div style="opacity:.7;font-size:11.5px;margin-top:5px;padding-top:5px;border-top:1px solid rgba(0,0,0,.12)">🌐 ${esc(secondary)}</div>`:""}
+    <time>${timeStr(m.at)}</time></div>`;
+}
+async function sendMsg(){const inp=$("#ctInput");const t=inp.value.trim();if(!t||!chatConn)return;inp.value="";
   const msg={from:"cg",text:t,at:nowT()};
+  const tr=await translateMsg(t,"Hebrew");
+  if(tr){msg.translated=tr;msg.translatedLang="עברית";}
   connCol().doc(chatConn._id).set({msgs:AU(msg),updatedAt:nowT()},{merge:true}).catch(e=>console.warn(e));
   chatConn.msgs=(chatConn.msgs||[]).concat(msg);renderChat(chatConn);
 }
