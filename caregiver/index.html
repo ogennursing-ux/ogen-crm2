@@ -133,6 +133,7 @@ img{display:block;max-width:100%}
   <section class="screen" id="chat"></section>
 
   <input type="file" id="photoInput" accept="image/*" style="display:none">
+  <input type="file" id="videoInput" accept="video/*" style="display:none">
   <div id="modalRoot"></div><div id="toast"></div>
 </div>
 <script>
@@ -158,6 +159,22 @@ const firebaseConfig={apiKey:"AIzaSyAHFamD1InXLSe1oPFWuuBk_SroK6duVHg",authDomai
 let fdb=null;
 try{firebase.initializeApp(firebaseConfig);fdb=firebase.firestore();}catch(e){console.warn("fb",e);}
 const cgDoc=id=>fdb.collection("hibur_cg").doc(String(id));
+
+/* ---------- media hosting (Cloudinary, unsigned preset — no secret in client code) ---------- */
+const CLOUDINARY_CLOUD="jf9wdasm", CLOUDINARY_PRESET="hibur_unsigned";
+function uploadToCloudinary(fileOrBlob,{onProgress}={}){
+  return new Promise((resolve,reject)=>{
+    const fd=new FormData(); fd.append("file",fileOrBlob); fd.append("upload_preset",CLOUDINARY_PRESET);
+    const xhr=new XMLHttpRequest();
+    xhr.open("POST",`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/auto/upload`);
+    xhr.upload.onprogress=e=>{if(onProgress&&e.lengthComputable)onProgress(Math.round(e.loaded/e.total*100));};
+    xhr.onload=()=>{try{const d=JSON.parse(xhr.responseText);
+      if(xhr.status>=200&&xhr.status<300)resolve(d); else reject(new Error((d.error&&d.error.message)||"upload failed"));
+    }catch(e){reject(e);}};
+    xhr.onerror=()=>reject(new Error("network error"));
+    xhr.send(fd);
+  });
+}
 const connCol=()=>fdb.collection("hibur_conn");
 const AU=x=>firebase.firestore.FieldValue.arrayUnion(x);
 
@@ -215,7 +232,7 @@ function renderProfile(){const tab=$("#tab");tab.className="tab";const w=me;
     </div>
     <div class="media-row">
       <div class="media-btn ${w.photo?"has":""}" onclick="$('#photoInput').click()">${svg(I.cam,22)}${w.photo?"תמונה הועלתה ✓":"העלאת תמונה"}</div>
-      <div class="media-btn ${w.video?"has":""}" onclick="setVideo()">${svg(I.video,22)}${w.video?"סרטון קיים ✓":"קישור לסרטון"}</div>
+      <div class="media-btn ${w.video?"has":""}" onclick="openVideoModal()">${svg(I.video,22)}${w.video?"סרטון הועלה ✓":"הוספת סרטון"}</div>
     </div>
     <div style="padding:6px 16px 90px">
       <div class="section-t">פרטים אישיים</div>
@@ -252,23 +269,40 @@ function saveProfile(){
   me.canHoist=ynState.hoist||me.canHoist; me.canDiapers=ynState.diapers||me.canDiapers; me.knowsDementia=ynState.dementia||me.knowsDementia;
   saveMe(); toast("הפרופיל נשמר ✓"); renderProfile();
 }
-/* photo upload → compress → dataURL (stored in Firestore doc, no Storage needed) */
+/* photo upload → resize client-side → upload to Cloudinary → store secure_url */
 $("#photoInput").onchange=e=>{const f=e.target.files[0];if(!f)return;
   const img=new Image();const rd=new FileReader();
   rd.onload=()=>{img.onload=()=>{
-    const cv=document.createElement("canvas");const max=560;let{width:w,height:h}=img;
+    const cv=document.createElement("canvas");const max=900;let{width:w,height:h}=img;
     if(w>h){if(w>max){h=h*max/w;w=max;}}else{if(h>max){w=w*max/h;h=max;}}
     cv.width=w;cv.height=h;cv.getContext("2d").drawImage(img,0,0,w,h);
-    me.photo=cv.toDataURL("image/jpeg",0.72); saveMe(); toast("התמונה הועלתה ✓"); renderProfile();
+    cv.toBlob(async blob=>{
+      toast("מעלה תמונה…");
+      try{const res=await uploadToCloudinary(blob);
+        me.photo=res.secure_url; saveMe(); toast("התמונה הועלתה ✓"); renderProfile();
+      }catch(err){toast("שגיאה בהעלאה — נסו שוב");console.warn(err);}
+    },"image/jpeg",0.82);
   };img.src=rd.result;};rd.readAsDataURL(f);};
-function setVideo(){
+function openVideoModal(){
   $("#modalRoot").innerHTML=`<div class="scrim" onclick="if(event.target===this)this.remove()"><div class="modal">
     <div class="mi">${svg(I.video,28)}</div><h3>סרטון היכרות</h3>
-    <p>הדבק/י קישור לסרטון (יוטיוב / וואטסאפ / דרייב). המשפחות יראו אותו בפרופיל שלך.</p>
-    <div class="field"><input id="vurl" placeholder="https://..." value="${esc(me.video||"")}" dir="ltr" style="text-align:left"></div>
-    <button class="big-btn cool" onclick="me.video=$('#vurl').value.trim();saveMe();$('#modalRoot').innerHTML='';toast('נשמר ✓');renderProfile()">שמירה</button>
+    <p>העלו סרטון קצר (עד 60MB) ישירות מהמכשיר — המשפחות יוכלו לצפות בו בפרופיל שלכם.</p>
+    <button class="big-btn cool" onclick="$('#modalRoot').innerHTML='';$('#videoInput').click()">${svg(I.cam,18)} העלאת סרטון מהמכשיר</button>
+    <div style="margin:16px 0 10px;font-size:12px;color:var(--ink-3)">— או הדביקו קישור קיים —</div>
+    <div class="field"><input id="vurl" placeholder="https://..." value="${esc(me.video&&me.video.includes('res.cloudinary.com')?'':(me.video||''))}" dir="ltr" style="text-align:left"></div>
+    <button class="big-btn" style="background:var(--paper);border:1.5px solid var(--line);box-shadow:none;color:var(--ink-2)" onclick="const v=$('#vurl').value.trim();if(v){me.video=v;saveMe();toast('נשמר ✓');renderProfile();}$('#modalRoot').innerHTML=''">שמירת קישור</button>
   </div></div>`;
 }
+$("#videoInput").onchange=async e=>{
+  const f=e.target.files[0]; if(!f)return;
+  if(f.size>60*1024*1024){toast("הסרטון גדול מדי — עד 60MB");e.target.value="";return;}
+  $("#modalRoot").innerHTML=`<div class="scrim"><div class="modal"><div class="mi">${svg(I.video,28)}</div><h3>מעלה סרטון…</h3><p id="vidPct" style="font-size:22px;font-weight:800;color:var(--anchor)">0%</p></div></div>`;
+  try{
+    const res=await uploadToCloudinary(f,{onProgress:p=>{const el=$("#vidPct");if(el)el.textContent=p+"%";}});
+    me.video=res.secure_url; saveMe(); $("#modalRoot").innerHTML=""; toast("הסרטון הועלה ✓"); renderProfile();
+  }catch(err){ $("#modalRoot").innerHTML=""; toast("שגיאה בהעלאת הסרטון — נסו שוב"); console.warn(err); }
+  e.target.value="";
+};
 
 /* ---------- REQUESTS (families interested) ---------- */
 function renderRequests(){const tab=$("#tab");tab.className="tab pad";

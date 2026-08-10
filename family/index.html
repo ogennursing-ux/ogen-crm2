@@ -615,12 +615,15 @@ function showMatchModal(w){
   </div></div>`;
   renderNav();
 }
-function playVideo(id){const w=cgById(id);
-  $("#modalRoot").innerHTML=`<div class="scrim" onclick="if(event.target===this)this.remove()"><div class="modal">
-    <div class="mi" style="background:var(--mist)">${svgF(I.play,30)}</div>
-    <h3>סרטון היכרות</h3>
-    <p>סרטון ההיכרות של ${esc(w.name)} יופיע כאן. בשלב הבא — הרכז/המטפל מעלים סרטון אמיתי (אחסון ענן).</p>
-    <button class="big-btn cool" onclick="$('#modalRoot').innerHTML=''">סגור</button>
+function playVideo(id){const w=cgById(id)||(connFor(id)||{}).cg;if(!w)return;
+  const isDirect=/\.(mp4|webm|mov)(\?|$)/i.test(w.video||"")||/res\.cloudinary\.com/.test(w.video||"");
+  $("#modalRoot").innerHTML=`<div class="scrim" onclick="if(event.target===this)this.remove()"><div class="modal" style="max-width:400px">
+    <h3 style="margin-bottom:12px">סרטון היכרות — ${esc(w.name)}</h3>
+    ${w.video?(isDirect
+      ?`<video src="${esc(w.video)}" controls autoplay playsinline style="width:100%;border-radius:14px;margin-bottom:14px;background:#000"></video>`
+      :`<a href="${esc(w.video)}" target="_blank" class="big-btn cool" style="margin-bottom:14px">${svg(I.play,18)} פתח/י את הסרטון</a>`)
+      :`<p style="margin-bottom:14px">${esc(w.name)} עדיין לא העלה/תה סרטון היכרות.</p>`}
+    <button class="big-btn" style="background:var(--paper);border:1.5px solid var(--line);box-shadow:none;color:var(--ink-2)" onclick="$('#modalRoot').innerHTML=''">סגור</button>
   </div></div>`;
 }
 
