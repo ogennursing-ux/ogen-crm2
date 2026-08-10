@@ -9,6 +9,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<!-- cloud accounts (cross-device) via Firebase; degrades gracefully to on-device if unavailable -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <style>
 /* ============================================================
    חיבור בקליק 2.0 — a real app: accounts, discover, profiles, chat
@@ -389,8 +392,24 @@ const pctOf=s=>Math.min(100,Math.round(s/1.8));
 const DB_KEY="hb_users", SESS_KEY="hb_session";
 let users={}, me=null, caregivers=[], deck=[], deckIdx=0, curTab="discover", detailId=null, chatId=null;
 function loadUsers(){try{users=JSON.parse(localStorage.getItem(DB_KEY)||"{}");}catch(e){users={};}}
-function saveUsers(){try{localStorage.setItem(DB_KEY,JSON.stringify(users));}catch(e){}}
+function saveUsersLocal(){try{localStorage.setItem(DB_KEY,JSON.stringify(users));}catch(e){}}
+function saveUsers(){saveUsersLocal();pushCloud();}
 const cgById=id=>caregivers.find(c=>c.id===id);
+
+/* ---------- cloud accounts (Firebase Firestore; graceful fallback to on-device) ---------- */
+const firebaseConfig={apiKey:"AIzaSyAHFamD1InXLSe1oPFWuuBk_SroK6duVHg",authDomain:"ogen-crm.firebaseapp.com",
+  projectId:"ogen-crm",storageBucket:"ogen-crm.firebasestorage.app",messagingSenderId:"111888037947",
+  appId:"1:111888037947:web:00b833b907138c1309041e"};
+let fdb=null, cloudTimer=null, unsub=null, applyingCloud=false;
+function initCloud(){try{if(typeof firebase==="undefined")return;if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);fdb=firebase.firestore();}catch(e){console.warn("cloud init",e);}}
+const userDoc=id=>fdb?fdb.collection("hibur").doc(String(id)):null; // separate collection — never touches CRM's crm/main
+function pushCloud(){if(!fdb||!me||applyingCloud)return;clearTimeout(cloudTimer);
+  cloudTimer=setTimeout(()=>{try{userDoc(me.id).set(JSON.parse(JSON.stringify(me))).catch(e=>console.warn("cloud push",e));}catch(e){}},500);}
+async function fetchCloud(id){if(!fdb)return null;try{const s=await userDoc(id).get();return s.exists?s.data():null;}catch(e){console.warn("cloud fetch",e);return null;}}
+function subscribeCloud(){if(!fdb||!me)return;try{if(unsub)unsub();
+  unsub=userDoc(me.id).onSnapshot(snap=>{if(snap.metadata.hasPendingWrites)return;const d=snap.data();if(!d)return;
+    applyingCloud=true;me=Object.assign(me,d);users[me.id]=me;saveUsersLocal();applyingCloud=false;
+    if($("#main").classList.contains("on"))switchTab(curTab);},e=>console.warn("cloud sub",e));}catch(e){}}
 
 /* ---------- navigation ---------- */
 function go(id){$$(".screen").forEach(s=>s.classList.remove("on"));const el=$("#"+id);el.classList.add("on");el.classList.add("fade");setTimeout(()=>el.classList.remove("fade"),260);}
@@ -411,12 +430,13 @@ function fillSignupForm(){
   // default select gender "no matter"
   $$("#su-gender .opt")[2].classList.add("sel");
 }
-function doSignup(){
+async function doSignup(){
   const name=$("#su-name").value.trim(), id=$("#su-id").value.replace(/\D/g,"");
   if(name.length<2){toast("הזינו שם מלא");return;}
   if(id.length<5){toast("הזינו תעודת זהות תקינה");return;}
   if(!$("#su-city").value){toast("בחרו עיר");return;}
-  if(users[id]){toast("כבר קיים חשבון עם ת\"ז זו — היכנסו");go("login");return;}
+  const existing=users[id]||await fetchCloud(id);
+  if(existing){toast("כבר קיים חשבון עם ת\"ז זו — היכנסו");go("login");return;}
   const gender=($("#su-gender .opt.sel")||{}).dataset?.v||"";
   const needs=$$("#su-needs .opt.sel").map(b=>b.dataset.need);
   const lang=($("#su-lang .opt.sel")||{}).dataset?.lang||"";
@@ -429,11 +449,13 @@ function doSignup(){
   saveUsers(); localStorage.setItem(SESS_KEY,id); me=users[id];
   enterApp();
 }
-function doLogin(){
+async function doLogin(){
   const name=$("#li-name").value.trim(), id=$("#li-id").value.replace(/\D/g,"");
-  const u=users[id];
+  if(!name||id.length<5){toast("מלאו שם ותעודת זהות");return;}
+  let u=users[id];
+  if(!u){ toast("בודק…"); u=await fetchCloud(id); if(u){users[id]=u;saveUsersLocal();} }
   if(!u){toast("לא נמצא חשבון — בדקו ת\"ז או הירשמו");return;}
-  if(u.name.trim()!==name){toast("השם אינו תואם לתעודת הזהות");return;}
+  if((u.name||"").trim()!==name){toast("השם אינו תואם לתעודת הזהות");return;}
   localStorage.setItem(SESS_KEY,id); me=u; enterApp();
 }
 function logout(){localStorage.removeItem(SESS_KEY);me=null;go("welcome");}
@@ -445,6 +467,7 @@ const TABS=[["discover","גלה",I.discover],["likes","לייקים",I.likes],["
 function enterApp(){
   caregivers=loadCaregivers();
   buildDeck();
+  subscribeCloud();
   go("main"); switchTab("discover");
 }
 function renderNav(){
@@ -723,11 +746,11 @@ function resetSeen(){me.passed=[];buildDeck();saveUsers();toast("אופס — כ
    BOOT
    ============================================================ */
 function init(){
-  loadUsers();
-  fillSignupForm();
+  loadUsers(); initCloud(); fillSignupForm();
   const sid=localStorage.getItem(SESS_KEY);
-  if(sid&&users[sid]){me=users[sid];enterApp();}
-  else go("welcome");
+  if(sid&&users[sid]){me=users[sid];enterApp();return;}
+  if(sid){ fetchCloud(sid).then(u=>{ if(u){users[sid]=u;me=u;saveUsersLocal();enterApp();}else go("welcome"); }); return; }
+  go("welcome");
 }
 init();
 </script>
