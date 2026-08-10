@@ -239,10 +239,10 @@ function saveMe(){if(!fdb||!me)return;try{cgDoc(me.id).set(JSON.parse(JSON.strin
 
 /* ---------- app shell ---------- */
 const TABS=[["profile","פרופיל",I.user],["requests","פניות",I.heart],["matches","מאצ'ים",I.match],["chats","צ'אט",I.chat]];
-function enterApp(){subscribeConns();go("main");switchTab(me.name?"requests":"profile");}
+function enterApp(){subscribeConns();loadHiburConfig();go("main");switchTab(me.name?"requests":"profile");}
 function renderNav(){
   const pend=conns.filter(c=>c.cgId===me.id&&c.famLiked&&!c.cgLiked).length;
-  const unread=conns.filter(c=>c.famLiked&&c.cgLiked).reduce((n,c)=>n+(c.msgs||[]).filter(m=>m.from==="fam"&&!(me.readAt&&m.at<=me.readAt[c.id||connId(c)])).length,0);
+  const unread=conns.filter(isMatched).reduce((n,c)=>n+(c.msgs||[]).filter(m=>m.from==="fam"&&!(me.readAt&&m.at<=me.readAt[c.id||connId(c)])).length,0);
   $("#nav").innerHTML=TABS.map(([id,label,icon])=>`<button class="${curTab===id?"on":""}" data-tab="${id}">${curTab===id?svgF(icon,23):svg(icon,23)}<span>${label}</span>${id==="requests"&&pend?`<i class="dot">${pend}</i>`:""}</button>`).join("");
   $$("#nav [data-tab]").forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
 }
@@ -251,6 +251,15 @@ function switchTab(t){curTab=t;$("#topTitle").textContent=TABS.find(x=>x[0]===t)
 
 /* ---------- connections (shared with family app) ---------- */
 const connId=c=>c.famId+"__"+c.cgId;
+let requireApproval=false;
+function loadHiburConfig(){
+  if(!fdb)return;
+  fdb.collection("hibur_config").doc("settings").onSnapshot(snap=>{
+    requireApproval=!!(snap.data()&&snap.data().requireApproval);
+    if($("#main").classList.contains("on"))switchTab(curTab);
+  },()=>{});
+}
+const isMatched=c=>!!(c&&c.famLiked&&c.cgLiked&&(!requireApproval||c.approved));
 function subscribeConns(){
   if(!fdb||!me)return; if(connUnsub)connUnsub();
   connUnsub=connCol().where("cgId","==",me.id).onSnapshot(snap=>{
@@ -470,7 +479,9 @@ function renderRequests(){const tab=$("#tab");tab.className="tab pad";
 }
 function respond(cid,yes){
   connCol().doc(cid).set({cgLiked:yes,cgId:me.id,cg:cgSnap(),updatedAt:nowT()},{merge:true})
-    .then(()=>{ if(yes){const c=conns.find(x=>x._id===cid);showMatch(c&&c.fam?c.fam.name:"המשפחה");} })
+    .then(()=>{ if(yes){const c=conns.find(x=>x._id===cid);
+      if(requireApproval)toast("הועבר לאישור רכז/ת עוגן — נעדכן ברגע שיאושר");
+      else showMatch(c&&c.fam?c.fam.name:"המשפחה"); } })
     .catch(e=>console.warn(e));
   if(!yes)toast("דילגת");
 }
@@ -484,7 +495,7 @@ function showMatch(famName){
 }
 
 /* ---------- MATCHES + CHATS ---------- */
-function matchedConns(){return conns.filter(c=>c.famLiked&&c.cgLiked);}
+function matchedConns(){return conns.filter(isMatched);}
 function renderMatches(){const tab=$("#tab");tab.className="tab pad";const ms=matchedConns();
   if(!ms.length){tab.innerHTML=emptyState(I.match,"אין מאצ'ים עדיין","כשתשיב/י בחיוב לפנייה של משפחה — היא תופיע כאן");return;}
   tab.innerHTML=`<div class="list-head">${ms.length} מאצ'ים</div>`+ms.map(c=>rowFam(c,`onclick="openChat('${c._id}')"`,`<button class="big-btn cool" style="width:auto;height:38px;padding:0 16px;font-size:13px">שוחח/י 💬</button>`)).join("");

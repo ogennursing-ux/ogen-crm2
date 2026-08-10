@@ -1397,10 +1397,32 @@ function renderInterviews(v){
     <div class="bd" style="padding:20px" id="hiburDigest">
       <div class="empty" style="padding:20px">${svg(I.brain,36)}<h3>טוען נתונים…</h3></div>
     </div>
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="hd">${svg(I.pin,18)}<h3>אישור התאמות</h3></div>
+    <div class="bd" style="padding:20px">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600;font-size:13.5px;margin-bottom:14px">
+        <input type="checkbox" id="requireApprovalToggle" style="width:18px;height:18px;accent-color:var(--anchor)">
+        התאמות חדשות דורשות אישור רכז/ת לפני שהן נחשפות למשפחה ולמטפל/ת
+      </label>
+      <div id="approvalQueue"><div class="empty" style="padding:16px">${svg(I.pin,32)}<h3>טוען…</h3></div></div>
+    </div>
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="hd">${svg(I.alert,18)}<h3>בדיקת כפילויות</h3>
+      <button class="btn sm ghost" style="margin-inline-start:auto" onclick="loadDuplicateCheck()">${svg(I.chat,14)}סרוק</button></div>
+    <div class="bd" style="padding:20px" id="dupCheck"><div class="empty" style="padding:16px">${svg(I.alert,32)}<h3>טוען…</h3></div></div>
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="hd">${svg(I.chat,18)}<h3>שיחות פעילות</h3></div>
+    <div class="bd" style="padding:12px" id="hiburChats"><div class="empty" style="padding:16px">${svg(I.chat,32)}<h3>טוען…</h3></div></div>
   </div>`;
   drawQR($("#qrBox"),link);
   drawQR($("#familyQr"),familyLink);
   loadHiburDigest();
+  loadApprovalQueue();
+  loadDuplicateCheck();
+  loadHiburChats();
 }
 
 /* ---------- חיבור בקליק daily digest for coordinator ---------- */
@@ -1455,6 +1477,90 @@ async function loadHiburDigest(){
   }catch(e){console.warn("hibur digest",e);box.innerHTML=`<div class="empty" style="padding:20px">${svg(I.alert,36)}<h3>שגיאה בטעינת נתונים</h3></div>`;}
 }
 function openInterviewPreview(){ window.open(location.pathname+"?mode=interview","_blank"); }
+
+/* ---------- אישור התאמות (coordinator approval gate) ---------- */
+const hiburConfigDoc=()=>{const fdb2=initHiburRead();return fdb2?fdb2.collection("hibur_config").doc("settings"):null;};
+async function loadApprovalQueue(){
+  const box=$("#approvalQueue"),toggle=$("#requireApprovalToggle"); if(!box)return;
+  const cfgRef=hiburConfigDoc(); if(!cfgRef){box.innerHTML="";return;}
+  try{
+    const cfgSnap=await cfgRef.get();
+    const cfg=cfgSnap.data()||{};
+    if(toggle){
+      toggle.checked=!!cfg.requireApproval;
+      toggle.onchange=()=>{cfgRef.set({requireApproval:toggle.checked},{merge:true}).then(()=>{toast(toggle.checked?"אישור רכז הופעל":"אישור רכז כובה","ok");loadApprovalQueue();});};
+    }
+    if(!cfg.requireApproval){box.innerHTML=`<p style="font-size:12.5px;color:var(--ink-3)">כבוי — התאמות נחשפות אוטומטית ברגע שיש עניין הדדי.</p>`;return;}
+    const fdb2=initHiburRead();
+    const connsSnap=await fdb2.collection("hibur_conn").get();
+    const pending=connsSnap.docs.map(d=>Object.assign({_id:d.id},d.data())).filter(c=>c.famLiked&&c.cgLiked&&!c.approved&&c.approved!==false);
+    if(!pending.length){box.innerHTML=`<div class="empty" style="padding:16px">${svg(I.check,32)}<h3>אין התאמות ממתינות</h3></div>`;return;}
+    box.innerHTML=pending.map(c=>`<div class="urg" style="cursor:default">
+      <div class="ic" style="background:var(--warn-soft);color:#b5701f">${svg(I.match,16)}</div>
+      <div class="tx"><b>${esc((c.fam&&c.fam.name)||"משפחה")} ↔ ${esc((c.cg&&c.cg.name)||"מטפל/ת")}</b><span>${esc((c.fam&&c.fam.city)||"")} · ${money((c.fam&&c.fam.budget)||0)}</span></div>
+      <button class="btn sm" onclick="approveMatch('${c._id}',true)">אשר</button>
+      <button class="btn sm danger" onclick="approveMatch('${c._id}',false)">דחה</button>
+    </div>`).join("");
+  }catch(e){console.warn("approval queue",e);box.innerHTML="";}
+}
+function approveMatch(connId,approve){
+  const fdb2=initHiburRead(); if(!fdb2)return;
+  fdb2.collection("hibur_conn").doc(connId).set({approved:approve},{merge:true})
+    .then(()=>{toast(approve?"אושר ✓":"נדחה","ok");loadApprovalQueue();}).catch(e=>console.warn(e));
+}
+
+/* ---------- בדיקת כפילויות ---------- */
+async function loadDuplicateCheck(){
+  const box=$("#dupCheck"); if(!box)return;
+  const fdb2=initHiburRead(); if(!fdb2){box.innerHTML="";return;}
+  try{
+    const cgsSnap=await fdb2.collection("hibur_cg").get();
+    const cgs=cgsSnap.docs.map(d=>d.data());
+    const normPhone=p=>String(p||"").replace(/\D/g,"").replace(/^972/,"0");
+    const byPhone={};
+    cgs.forEach(c=>{const p=normPhone(c.phone); if(!p)return; (byPhone[p]=byPhone[p]||[]).push(c);});
+    const dupPhones=Object.entries(byPhone).filter(([,list])=>list.length>1);
+    if(!dupPhones.length){box.innerHTML=`<div class="empty" style="padding:16px">${svg(I.check,32)}<h3>לא נמצאו כפילויות</h3><p>נבדקו ${cgs.length} פרופילי מטפלים</p></div>`;return;}
+    box.innerHTML=`<p style="font-size:12.5px;color:var(--ink-3);margin-bottom:10px">${dupPhones.length} מספרי טלפון שחוזרים ביותר מחשבון אחד — ייתכן חשבונות כפולים:</p>`+
+      dupPhones.map(([phone,list])=>`<div class="urg" style="cursor:default">
+        <div class="ic" style="background:var(--danger-soft);color:var(--danger)">${svg(I.alert,16)}</div>
+        <div class="tx"><b>${esc(phone)}</b><span>${list.map(c=>esc(c.name||"—")).join(" · ")}</span></div>
+      </div>`).join("");
+  }catch(e){console.warn("dup check",e);box.innerHTML="";}
+}
+
+/* ---------- שיחות פעילות + סיכום AI ---------- */
+async function loadHiburChats(){
+  const box=$("#hiburChats"); if(!box)return;
+  const fdb2=initHiburRead(); if(!fdb2){box.innerHTML="";return;}
+  try{
+    const connsSnap=await fdb2.collection("hibur_conn").get();
+    const active=connsSnap.docs.map(d=>Object.assign({_id:d.id},d.data())).filter(c=>(c.msgs||[]).length).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+    if(!active.length){box.innerHTML=`<div class="empty" style="padding:16px">${svg(I.chat,32)}<h3>אין שיחות פעילות עדיין</h3></div>`;return;}
+    box.innerHTML=active.map(c=>`<div class="urg" style="align-items:flex-start" id="chatrow-${c._id}">
+      <div class="ic" style="background:var(--ok-soft);color:var(--ok)">${svg(I.chat,16)}</div>
+      <div class="tx"><b>${esc((c.fam&&c.fam.name)||"משפחה")} ↔ ${esc((c.cg&&c.cg.name)||"מטפל/ת")}</b><span>${(c.msgs||[]).length} הודעות</span>
+        <div id="chatsummary-${c._id}" style="margin-top:6px"></div></div>
+      ${hasAI()?`<button class="btn sm" onclick="summarizeChat('${c._id}')">✨ סכם</button>`:""}
+    </div>`).join("");
+  }catch(e){console.warn("hibur chats",e);box.innerHTML="";}
+}
+let hiburChatsCache={};
+async function summarizeChat(connId){
+  const box=$("#chatsummary-"+connId); if(!box)return;
+  box.innerHTML=`<span style="font-size:12px;color:var(--ink-3)">מנתח…</span>`;
+  try{
+    const fdb2=initHiburRead();
+    const snap=await fdb2.collection("hibur_conn").doc(connId).get();
+    const c=snap.data(); const msgs=c&&c.msgs||[];
+    const transcript=msgs.map(m=>(m.from==="fam"?"משפחה":"מטפל/ת")+": "+(m.translated||m.text)).join("\n");
+    const text=await callAI([{role:"user",content:
+      `תמלול שיחה בין משפחה למטפל/ת בפלטפורמת השמה:\n${transcript}\n\n`+
+      `סכם/י ב-2 משפטים למה סוכם/מדובר, וסמן/י אם יש משהו חריג שדורש תשומת לב רכז (למשל הבטחות לא ריאליות, ניסיון לעקוף את עוגן, חוסר התאמה). אם הכול תקין — ציין/י זאת בקצרה.`
+    }],"את/ה עוזר/ת לרכז השמה. תשובה קצרה, ענינית.");
+    box.innerHTML=`<div style="background:var(--mist);border-radius:10px;padding:9px 11px;font-size:12.5px;color:var(--ink-2);line-height:1.5">${esc(text)}</div>`;
+  }catch(e){box.innerHTML=`<span style="font-size:12px;color:var(--danger)">שגיאה בסיכום</span>`;console.warn(e);}
+}
 
 /* ---------- tiny QR (module drawing, no external lib needed for preview) ---------- */
 function drawQR(box,text){

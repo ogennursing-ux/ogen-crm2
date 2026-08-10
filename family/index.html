@@ -497,7 +497,7 @@ const TABS=[["discover","גלה",I.discover],["likes","לייקים",I.likes],["
 function enterApp(){
   caregivers=loadCaregivers();
   buildDeck();
-  subscribeCloud(); subscribeFamConns();
+  subscribeCloud(); subscribeFamConns(); loadHiburConfig();
   go("main"); switchTab("discover");
   fetchCloudCaregivers().then(cloud=>{
     if(!cloud.length)return;
@@ -507,7 +507,7 @@ function enterApp(){
   });
 }
 function renderNav(){
-  const matches=famConns.filter(c=>c.famLiked&&c.cgLiked);
+  const matches=famConns.filter(isMatched);
   const unread=matches.reduce((n,c)=>n+(c.msgs||[]).filter(m=>m.from==="cg"&&m.at>(readAt[c._id]||0)).length,0);
   $("#nav").innerHTML=TABS.map(([id,label,icon])=>`
     <button class="${curTab===id?"on":""}" data-tab="${id}">
@@ -627,11 +627,21 @@ let famConns=[], connUnsub2=null, readAt={}, matchedIds=[];
 const connCol=()=>fdb?fdb.collection("hibur_conn"):null;
 const AU=x=>firebase.firestore.FieldValue.arrayUnion(x);
 const connFor=cgId=>famConns.find(c=>c.cgId===cgId);
+/* coordinator approval gate — off unless CRM turns it on in hibur_config/settings */
+let requireApproval=false;
+function loadHiburConfig(){
+  if(!fdb)return;
+  fdb.collection("hibur_config").doc("settings").onSnapshot(snap=>{
+    requireApproval=!!(snap.data()&&snap.data().requireApproval);
+    if($("#main").classList.contains("on"))switchTab(curTab);
+  },()=>{});
+}
+const isMatched=c=>!!(c&&c.famLiked&&c.cgLiked&&(!requireApproval||c.approved));
 function subscribeFamConns(){
   if(!connCol()||!me)return; if(connUnsub2)connUnsub2();
   connUnsub2=connCol().where("famId","==",me.id).onSnapshot(snap=>{
     famConns=snap.docs.map(d=>Object.assign({_id:d.id},d.data()));
-    const nowMatched=famConns.filter(c=>c.famLiked&&c.cgLiked).map(c=>c.cgId);
+    const nowMatched=famConns.filter(isMatched).map(c=>c.cgId);
     const fresh=nowMatched.filter(id=>!matchedIds.includes(id));
     matchedIds=nowMatched;
     if($("#main").classList.contains("on"))switchTab(curTab);
@@ -768,19 +778,19 @@ function detailDecide(kind){const id=detailId;const w=cgById(id);
   deck=deck.filter(x=>x.w.id!==id);if(deckIdx>deck.length)deckIdx=deck.length;
   saveUsers();go("main");switchTab(curTab==="discover"?"discover":curTab);
 }
-function openChatOrWa(id){ const c=connFor(id); if(c&&c.famLiked&&c.cgLiked) openChat(id); else toast("נמתין שהמטפל/ת יאשר/תאשר — נעדכן אותך"); }
+function openChatOrWa(id){ const c=connFor(id); if(isMatched(c)) openChat(id); else toast("נמתין שהמטפל/ת יאשר/תאשר — נעדכן אותך"); }
 
 /* ---------- LIKES ---------- */
 function renderLikes(){const tab=$("#tab");tab.className="tab pad";
   if(!me.liked.length){tab.innerHTML=emptyState(I.likes,"עדיין לא אהבת אף אחד","חזור/י ל\"גלה\" והחלק/י ♥ על מטפלים שמוצאים חן");return;}
   tab.innerHTML=`<div class="list-head">אהבת ${me.liked.length} מטפלים</div>`+
-    me.liked.map(id=>{const w=cgById(id)||(connFor(id)||{}).cg;if(!w)return"";const c=connFor(id);const matched=c&&c.famLiked&&c.cgLiked;
+    me.liked.map(id=>{const w=cgById(id)||(connFor(id)||{}).cg;if(!w)return"";const c=connFor(id);const matched=isMatched(c);
       return rowFor(w,`onclick="${matched?`openChat('${id}')`:`openDetail('${id}')`}"`,matched?`<span class="badge-match">מאצ' ✓</span>`:`<span class="badge-wait">ממתין</span>`);
     }).join("");
 }
 /* ---------- MATCHES ---------- */
 function renderMatches(){const tab=$("#tab");tab.className="tab pad";
-  const ms=famConns.filter(c=>c.famLiked&&c.cgLiked);
+  const ms=famConns.filter(isMatched);
   if(!ms.length){tab.innerHTML=emptyState(I.match,"אין מאצ'ים עדיין","כשמטפל/ת שאהבת מעוניין/ת גם — הוא/היא יופיעו כאן ותוכל/י לשוחח");return;}
   tab.innerHTML=`<div class="list-head">${ms.length} מאצ'ים</div><div class="list-sub">התאמה הדדית — אפשר לשוחח ולתאם היכרות.</div>`+
     ms.slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).map(c=>{const w=cgById(c.cgId)||c.cg||{name:"מטפל/ת"};
@@ -789,7 +799,7 @@ function renderMatches(){const tab=$("#tab");tab.className="tab pad";
 }
 /* ---------- CHATS list ---------- */
 function renderChats(){const tab=$("#tab");tab.className="tab pad";
-  const cs=famConns.filter(c=>c.famLiked&&c.cgLiked&&(c.msgs||[]).length).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  const cs=famConns.filter(c=>isMatched(c)&&(c.msgs||[]).length).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
   if(!cs.length){tab.innerHTML=emptyState(I.chat,"אין שיחות עדיין","התחל/י שיחה מתוך מאצ' — וההתכתבות גם תישלח לוואטסאפ של המטפל/ת");return;}
   tab.innerHTML=`<div class="list-head">שיחות</div>`+
     cs.map(c=>{const w=cgById(c.cgId)||c.cg||{name:"מטפל/ת"};const lm=last(c.msgs);const unread=(c.msgs||[]).filter(m=>m.from==="cg"&&m.at>(readAt[c._id]||0)).length;
