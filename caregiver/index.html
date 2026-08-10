@@ -135,6 +135,7 @@ img{display:block;max-width:100%}
 
   <input type="file" id="photoInput" accept="image/*" style="display:none">
   <input type="file" id="videoInput" accept="video/*" style="display:none">
+  <input type="file" id="docInput" accept="image/*" style="display:none">
   <div id="modalRoot"></div><div id="toast"></div>
 </div>
 <script>
@@ -152,6 +153,7 @@ const I={user:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="
   x:'<path d="M18 6 6 18M6 6l12 12"/>',check:'<path d="M20 6 9 17l-5-5"/>',send:'<path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/>',logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>'};
 const svg=(p,w=22)=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:${w}px;height:${w}px">${p}</svg>`;
 const svgF=(p,w=22)=>`<svg viewBox="0 0 24 24" fill="currentColor" style="width:${w}px;height:${w}px">${p}</svg>`;
+const jitsiLink=connId=>"https://meet.jit.si/hibur-"+String(connId).replace(/[^a-zA-Z0-9]/g,"");
 const CITIES=["תל אביב","ירושלים","חיפה","באר שבע","רמת גן","פתח תקווה","נתניה","ראשון לציון","אשדוד","הרצליה","חולון","כפר סבא"];
 const NAT=["מולדובה","פיליפינים","הודו","נפאל","אוזבקיסטן","רומניה","סרי לנקה","ישראל","אחר"];
 
@@ -200,6 +202,19 @@ async function translateMsg(text,targetLang){
   try{return await callAI(text,`Translate the user's message into ${targetLang}. Reply with ONLY the translation, nothing else — no quotes, no explanation, no original text.`);}
   catch(e){console.warn("translate",e);return null;}
 }
+async function callAIMedia(prompt,base64Data,mimeType,system){
+  const key=getAIKey(); if(!key)throw new Error("no-key");
+  const body={contents:[{role:"user",parts:[{text:prompt},{inline_data:{mime_type:mimeType,data:base64Data}}]}]};
+  if(system)body.systemInstruction={parts:[{text:system}]};
+  const ctrl=new AbortController();const to=setTimeout(()=>ctrl.abort(),40000);
+  const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${encodeURIComponent(key)}`,
+    {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:ctrl.signal});
+  clearTimeout(to);
+  if(!r.ok)throw new Error("AI "+r.status);
+  const d=await r.json();
+  return ((d.candidates&&d.candidates[0]&&d.candidates[0].content&&d.candidates[0].content.parts)||[]).map(p=>p.text||"").join("").trim();
+}
+const blobToB64=blob=>new Promise((res,rej)=>{const rd=new FileReader();rd.onload=()=>res(rd.result.split(",")[1]);rd.onerror=rej;rd.readAsDataURL(blob);});
 
 /* ---------- state ---------- */
 let me=null, curTab="profile", conns=[], connUnsub=null, chatConn=null;
@@ -242,7 +257,25 @@ function subscribeConns(){
     conns=snap.docs.map(d=>Object.assign({_id:d.id},d.data()));
     if($("#main").classList.contains("on"))switchTab(curTab);
     if($("#chat").classList.contains("on")&&chatConn){const c=conns.find(x=>x._id===chatConn._id);if(c){chatConn=c;renderChat(c);}}
+    recomputeRating();
   },e=>console.warn("conn sub",e));
+}
+function recomputeRating(){
+  const rated=conns.filter(c=>typeof c.famRating==="number");
+  if(!rated.length)return;
+  const avg=rated.reduce((s,c)=>s+c.famRating,0)/rated.length;
+  const r=Math.round(avg*10)/10;
+  if(me.rating!==r){me.rating=r;saveMe();}
+}
+function markPlaced(connId){
+  if(!confirm("לסמן שההשמה עם המשפחה הושלמה? זה יפתח דירוג קצר לשני הצדדים."))return;
+  connCol().doc(connId).set({placed:true,placedAt:nowT()},{merge:true}).catch(e=>console.warn(e));
+  toast("סומן ✓");
+}
+function submitRating(connId,stars){
+  $$("#ratingStars button").forEach((b,i)=>b.style.opacity=i<stars?1:.35);
+  connCol().doc(connId).set({cgRating:stars,cgRatingAt:nowT()},{merge:true})
+    .then(()=>toast("תודה על הדירוג! ⭐")).catch(e=>console.warn(e));
 }
 
 /* ---------- PROFILE + MEDIA ---------- */
@@ -258,6 +291,10 @@ function renderProfile(){const tab=$("#tab");tab.className="tab";const w=me;
       <div class="media-btn ${w.video?"has":""}" onclick="openVideoModal()">${svg(I.video,22)}${w.video?"סרטון הועלה ✓":"הוספת סרטון"}</div>
     </div>
     <div style="padding:6px 16px 90px">
+      <div class="section-t">אימות מסמכים</div>
+      <p style="font-size:12px;color:var(--ink-3);margin-bottom:8px">העלו צילום דרכון או ויזה — נבדק אוטומטית ונשלח לרכז/ת עוגן.</p>
+      <div class="media-btn ${w.idDoc?"has":""}" style="width:100%" onclick="$('#docInput').click()">📄 ${w.idDoc?"מסמך הועלה — להחלפה לחצו כאן":"העלאת דרכון/ויזה"}</div>
+      <div id="docCheckBox">${docCheckHtml(w)}</div>
       <div class="section-t">פרטים אישיים</div>
       <div class="field"><label>שם מלא</label><input id="f-name" value="${esc(w.name)}" placeholder="שם פרטי ומשפחה"></div>
       <div class="grid2">
@@ -281,7 +318,8 @@ function renderProfile(){const tab=$("#tab");tab.className="tab";const w=me;
       <div class="section-t">קצת על עצמך</div>
       <div class="field"><label>ספר/י בחופשיות — תחביבים, ניסיון, למה את/ה טוב/ה במה שאת/ה עושה</label>
         <textarea id="f-about" placeholder="למשל: אוהבת לבשל, סבלנית מאוד, טיפלתי בסבתא שלי 3 שנים...">${esc(w.about||"")}</textarea></div>
-      ${hasAI()?`<button class="big-btn" style="background:var(--like-soft);color:var(--like);box-shadow:none" onclick="generateBio()">✨ נסח/י לי תיאור מקצועי עם AI</button>`:""}
+      ${hasAI()?`<button class="big-btn" id="micBtn" style="background:var(--paper);border:1.5px solid var(--line);box-shadow:none;color:var(--ink-2)" onclick="toggleRecording()">🎙️ הקליטו במקום לכתוב</button>`:""}
+      ${hasAI()?`<button class="big-btn" style="margin-top:10px;background:var(--like-soft);color:var(--like);box-shadow:none" onclick="generateBio()">✨ נסח/י לי תיאור מקצועי עם AI</button>`:""}
       ${w.bio?`<div class="rec" style="margin-top:10px;background:var(--like-soft)"><div class="who" style="color:var(--like)">התיאור שהמשפחות רואות</div>${esc(w.bio)}</div>`:""}
       <button class="big-btn cool" style="margin-top:14px" onclick="saveProfile()">שמירת פרופיל</button>
       <div class="section-t">בינה מלאכותית (AI)</div>
@@ -292,6 +330,65 @@ function renderProfile(){const tab=$("#tab");tab.className="tab";const w=me;
     </div>`;
 }
 function saveGeminiKey(){const v=$("#geminiKeyInput").value.trim();localStorage.setItem("hbGeminiKey",v);toast(v?"מפתח נשמר — AI פעיל ✓":"המפתח הוסר");renderProfile();}
+let mediaRecorder=null, recChunks=[], recStream=null;
+async function toggleRecording(){
+  const btn=$("#micBtn");
+  if(mediaRecorder&&mediaRecorder.state==="recording"){mediaRecorder.stop();return;}
+  try{
+    recStream=await navigator.mediaDevices.getUserMedia({audio:true});
+  }catch(e){toast("אין הרשאה למיקרופון");return;}
+  recChunks=[];
+  mediaRecorder=new MediaRecorder(recStream);
+  mediaRecorder.ondataavailable=e=>{if(e.data.size>0)recChunks.push(e.data);};
+  mediaRecorder.onstop=async()=>{
+    recStream.getTracks().forEach(t=>t.stop());
+    btn.textContent="⏳ מתמלל…"; btn.disabled=true;
+    try{
+      const blob=new Blob(recChunks,{type:mediaRecorder.mimeType||"audio/webm"});
+      const b64=await blobToB64(blob);
+      const text=await callAIMedia(
+        "תמלל/י את ההקלטה הזו לטקסט. החזר/י רק את התמלול, בלי הערות נוספות.",
+        b64, blob.type||"audio/webm", "את/ה מתמלל/ת הקלטות קול לטקסט. תשובה = התמלול בלבד."
+      );
+      if(text){const ta=$("#f-about"); ta.value=(ta.value?ta.value+" ":"")+text; toast("תומלל ✓");}
+    }catch(e){toast("שגיאה בתמלול — נסו שוב");console.warn(e);}
+    btn.textContent="🎙️ הקליטו במקום לכתוב"; btn.disabled=false;
+  };
+  mediaRecorder.start();
+  btn.textContent="⏹️ עצירת הקלטה"; btn.style.background="var(--nope-soft,#FADFD9)"; btn.style.color="var(--nope)";
+}
+function docCheckHtml(w){
+  if(!w.idDocCheck)return "";
+  const ok=w.idDocCheck.ok;
+  return `<div class="rec" style="margin-top:10px;background:${ok?"var(--like-soft)":"#FADFD9"}">
+    <div class="who" style="color:${ok?"var(--like)":"var(--nope)"}">${ok?"✅ המסמך נראה תקין":"⚠️ נדרשת בדיקה ידנית"}</div>
+    ${esc(w.idDocCheck.reason||"")}</div>`;
+}
+$("#docInput").onchange=async e=>{
+  const f=e.target.files[0]; if(!f)return;
+  if(!hasAI()){toast("הזינו מפתח Gemini למטה כדי להפעיל בדיקה אוטומטית");}
+  toast("מעלה מסמך…");
+  try{
+    const [uploadRes,b64]=await Promise.all([uploadToCloudinary(f),blobToB64(f)]);
+    me.idDoc=uploadRes.secure_url; saveMe();
+    if(hasAI()){
+      toast("בודק מסמך…");
+      try{
+        const raw=await callAIMedia(
+          "זהו צילום של מסמך זיהוי (דרכון או ויזה) של מטפל/ת סיעודי/ת. בדוק/י: האם ניתן לזהות שזהו אכן מסמך רשמי, האם התמונה ברורה וקריאה, והאם נראה בתוקף (אם יש תאריך תפוגה גלוי). "+
+          'החזר/י אך ורק JSON: {"ok":true|false,"reason":"משפט קצר בעברית"}',
+          b64, f.type||"image/jpeg", "את/ה בודק/ת מסמכי זהות עבור צוות גיוס. תשובה קצרה, JSON בלבד."
+        );
+        const m=raw.match(/\{[\s\S]*\}/);
+        const d=m?JSON.parse(m[0]):{ok:false,reason:"לא ניתן היה לנתח את המסמך אוטומטית"};
+        me.idDocCheck={ok:!!d.ok,reason:d.reason||"",checkedAt:nowT()};
+      }catch(err){me.idDocCheck={ok:false,reason:"שגיאה בבדיקה האוטומטית — יבדק ידנית",checkedAt:nowT()};console.warn(err);}
+      saveMe();
+    }
+    toast("המסמך נשמר ✓"); renderProfile();
+  }catch(err){toast("שגיאה בהעלאה — נסו שוב");console.warn(err);}
+  e.target.value="";
+};
 async function generateBio(){
   const about=($("#f-about")||{}).value||me.about||"";
   if(!about.trim()){toast("כתוב/כתבי קודם כמה מילים על עצמך למעלה");return;}
@@ -409,7 +506,13 @@ function renderChat(c){const f=c.fam||{};const msgs=c.msgs||[];
   $("#chat").innerHTML=`
     <div class="ct-head"><button class="back" onclick="go('main');switchTab('chats')">→</button>
       <div class="av" style="width:40px;height:40px;border-radius:50%;font-size:16px">${esc((f.name||"?")[0])}</div>
-      <div class="who"><b>${esc(f.name||"משפחה")}</b><span>${esc(f.city||"")}</span></div></div>
+      <div class="who"><b>${esc(f.name||"משפחה")}</b><span>${esc(f.city||"")}</span></div>
+      <a class="wa" style="margin-inline-start:auto;color:var(--anchor)" href="${jitsiLink(c._id)}" target="_blank" title="שיחת וידאו">${svg(I.video,20)}</a></div>
+    ${!c.placed?`<div style="padding:9px 14px;background:var(--mist);text-align:center"><button style="font-size:12px;font-weight:700;color:var(--anchor)" onclick="markPlaced('${c._id}')">✓ סמנו שההשמה הושלמה</button></div>`:""}
+    ${c.placed&&!c.cgRating?`<div style="padding:12px 14px;background:var(--like-soft)">
+      <div style="font-size:13px;font-weight:700;color:var(--like);margin-bottom:8px">איך היה עם משפחת ${esc(f.name||"")}? דרגו:</div>
+      <div id="ratingStars" style="display:flex;gap:6px;justify-content:center">${[1,2,3,4,5].map(n=>`<button onclick="submitRating('${c._id}',${n})" style="font-size:26px;opacity:.35">★</button>`).join("")}</div>
+    </div>`:""}
     <div class="ct-body" id="ctBody">${msgs.length?msgs.map(bubble).join(""):`<div style="text-align:center;color:var(--ink-3);font-size:12px;padding:8px">תחילת השיחה עם ${esc(f.name||"המשפחה")}</div>`}</div>
     <div class="ct-foot"><input id="ctInput" placeholder="הקלד/י הודעה…" onkeydown="if(event.key==='Enter')sendMsg()"><button class="send" onclick="sendMsg()">${svg(I.send,20)}</button></div>`;
   const b=$("#ctBody");b.scrollTop=b.scrollHeight;
