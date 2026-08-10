@@ -1823,28 +1823,38 @@ function toast(msg,type="ok"){
 /* ============================================================
    INTERVIEW ENGINE (?mode=interview)  — spec א6
    ============================================================ */
-const IV_LANGS={
+const IV_LANGS={ // 9 languages per spec (א6)
   "עברית":{code:"he",greet:"שלום! אני יעל מחברת עוגן 😊 אני אשאל אותך כמה שאלות קצרות כדי להכיר אותך. מה שמך המלא?",
     thanks:"תודה רבה!",done:"מעולה, סיימנו! 🎉 הפרטים שלך נשמרו ורכז/ת שלנו יחזור/תחזור אליך בקרוב. יום נעים!"},
   "English":{code:"en",greet:"Hello! I'm Yael from Ogen 😊 I'll ask you a few short questions. What is your full name?",
     thanks:"Thank you!",done:"Great, we're done! 🎉 Your details were saved and our coordinator will contact you soon."},
+  "Oʻzbekcha":{code:"uz",greet:"Salom! Men Ogendan Yaelman 😊 Sizga bir nechta qisqa savol beraman. Toʻliq ismingiz nima?",
+    thanks:"Katta rahmat!",done:"Ajoyib, tugatdik! 🎉 Maʼlumotlaringiz saqlandi, muvofiqlashtiruvchimiz tez orada siz bilan bogʻlanadi."},
   "Русский":{code:"ru",greet:"Здравствуйте! Я Яэль из Оген 😊 Я задам несколько коротких вопросов. Как вас зовут?",
     thanks:"Спасибо!",done:"Отлично, готово! 🎉 Ваши данные сохранены, координатор скоро свяжется с вами."},
-  "English (PH)":{code:"tl",greet:"Kumusta! Ako si Yael from Ogen 😊 May ilang tanong lang ako. Ano ang buong pangalan mo?",
+  "Română":{code:"ro",greet:"Bună! Sunt Yael de la Ogen 😊 O să vă pun câteva întrebări scurte. Care este numele dvs. complet?",
+    thanks:"Mulțumesc mult!",done:"Excelent, am terminat! 🎉 Datele dvs. au fost salvate și coordonatorul nostru vă va contacta în curând."},
+  "Tagalog":{code:"tl",greet:"Kumusta! Ako si Yael from Ogen 😊 May ilang tanong lang ako. Ano ang buong pangalan mo?",
     thanks:"Salamat!",done:"Great, tapos na tayo! 🎉 Na-save na ang details mo. Magco-contact ang coordinator namin."},
+  "Español":{code:"es",greet:"¡Hola! Soy Yael de Ogen 😊 Te haré algunas preguntas breves. ¿Cuál es tu nombre completo?",
+    thanks:"¡Muchas gracias!",done:"¡Genial, terminamos! 🎉 Tus datos fueron guardados y nuestro coordinador se pondrá en contacto pronto."},
+  "فارسی":{code:"fa",greet:"سلام! من یائل از عوگن هستم 😊 چند سؤال کوتاه می‌پرسم. نام کامل شما چیست؟",
+    thanks:"خیلی متشکرم!",done:"عالی، تمام شد! 🎉 اطلاعات شما ذخیره شد و هماهنگ‌کننده ما به‌زودی با شما تماس می‌گیرد."},
+  "አማርኛ":{code:"am",greet:"ሰላም! እኔ ከኦገን ያዔል ነኝ 😊 ጥቂት አጭር ጥያቄዎችን እጠይቅዎታለሁ። ሙሉ ስምዎ ማን ነው?",
+    thanks:"በጣም አመሰግናለሁ!",done:"በጣም ጥሩ፣ ጨርሰናል! 🎉 መረጃዎ ተቀምጧል እናም አስተባባሪያችን በቅርቡ ያገኝዎታል።"},
 };
-const IV_QUESTIONS=[ // 11 info points (spec)
-  {key:"name",q:{he:"מה שמך המלא?",en:"What is your full name?",ru:"Как вас зовут (полное имя)?",tl:"Ano ang buong pangalan mo?"}},
-  {key:"nationality",q:{he:"מאיזו מדינה את/ה?",en:"Which country are you from?",ru:"Из какой вы страны?",tl:"Taga-saang bansa ka?"}},
-  {key:"experience",q:{he:"כמה שנות ניסיון יש לך בטיפול?",en:"How many years of caregiving experience do you have?",ru:"Сколько лет опыта ухода у вас есть?",tl:"Ilang taon ka nang nag-aalaga?"}},
-  {key:"elderly",q:{he:"יש לך ניסיון עם קשישים? ספר/י בקצרה.",en:"Do you have experience with the elderly? Briefly.",ru:"Есть ли опыт с пожилыми? Кратко.",tl:"May karanasan ka ba sa matatanda?"}},
-  {key:"israel",q:{he:"האם עבדת בישראל בעבר?",en:"Have you worked in Israel before?",ru:"Вы работали в Израиле раньше?",tl:"Nagtrabaho ka na ba sa Israel?"}},
-  {key:"live",q:{he:"את/ה מוכן/ה ללון בבית המטופל?",en:"Are you willing to live in the patient's home?",ru:"Готовы ли вы жить в доме пациента?",tl:"Handa ka bang tumira sa bahay ng pasyente?"}},
-  {key:"salary",q:{he:"מהי ציפיית השכר החודשית שלך (בשקלים)?",en:"What is your expected monthly salary (in ILS)?",ru:"Какая у вас ожидаемая зарплата (в шекелях)?",tl:"Magkano ang inaasahang sahod mo (ILS)?"}},
-  {key:"dementia",q:{he:"יש לך ניסיון עם אלצהיימר/דמנציה? (כן/לא)",en:"Experience with Alzheimer's/dementia? (yes/no)",ru:"Опыт с деменцией? (да/нет)",tl:"May karanasan sa dementia? (oo/hindi)"}},
-  {key:"physical",q:{he:"את/ה מסוגל/ת לטיפול גופני (הרמה, חיתולים)? (כן/לא)",en:"Can you do physical care (lifting, diapers)? (yes/no)",ru:"Физический уход (подъём, памперсы)? (да/нет)",tl:"Kaya mo ba ang physical care? (oo/hindi)"}},
-  {key:"strengths",q:{he:"מהם החוזקות שלך כמטפל/ת?",en:"What are your strengths as a caregiver?",ru:"В чём ваши сильные стороны?",tl:"Ano ang mga lakas mo?"}},
-  {key:"visa",q:{he:"מה סטטוס הוויזה שלך?",en:"What is your visa status?",ru:"Каков ваш визовый статус?",tl:"Ano ang visa status mo?"}},
+const IV_QUESTIONS=[ // 11 info points (spec), translated into all 9 languages
+  {key:"name",q:{he:"מה שמך המלא?",en:"What is your full name?",uz:"Toʻliq ismingiz nima?",ru:"Как вас зовут (полное имя)?",ro:"Care este numele dvs. complet?",tl:"Ano ang buong pangalan mo?",es:"¿Cuál es tu nombre completo?",fa:"نام کامل شما چیست؟",am:"ሙሉ ስምዎ ማን ነው?"}},
+  {key:"nationality",q:{he:"מאיזו מדינה את/ה?",en:"Which country are you from?",uz:"Qaysi davlatdansiz?",ru:"Из какой вы страны?",ro:"Din ce țară sunteți?",tl:"Taga-saang bansa ka?",es:"¿De qué país eres?",fa:"اهل کدام کشور هستید؟",am:"ከየትኛው ሀገር ነዎት?"}},
+  {key:"experience",q:{he:"כמה שנות ניסיון יש לך בטיפול?",en:"How many years of caregiving experience do you have?",uz:"Parvarish sohasida necha yillik tajribangiz bor?",ru:"Сколько лет опыта ухода у вас есть?",ro:"Câți ani de experiență aveți în îngrijire?",tl:"Ilang taon ka nang nag-aalaga?",es:"¿Cuántos años de experiencia tienes en cuidado de personas?",fa:"چند سال تجربه مراقبت دارید؟",am:"በእንክብካቤ ስንት ዓመት ልምድ አለዎት?"}},
+  {key:"elderly",q:{he:"יש לך ניסיון עם קשישים? ספר/י בקצרה.",en:"Do you have experience with the elderly? Briefly.",uz:"Keksalar bilan ishlagan tajribangiz bormi? Qisqacha aytib bering.",ru:"Есть ли опыт с пожилыми? Кратко.",ro:"Aveți experiență cu persoane în vârstă? Pe scurt.",tl:"May karanasan ka ba sa matatanda?",es:"¿Tienes experiencia con personas mayores? Cuéntame brevemente.",fa:"تجربه‌ای در مراقبت از سالمندان دارید؟ به‌طور خلاصه بگویید.",am:"ከአዛውንቶች ጋር ልምድ አለዎት? በአጭሩ ይንገሩኝ።"}},
+  {key:"israel",q:{he:"האם עבדת בישראל בעבר?",en:"Have you worked in Israel before?",uz:"Ilgari Isroilda ishlaganmisiz?",ru:"Вы работали в Израиле раньше?",ro:"Ați mai lucrat în Israel?",tl:"Nagtrabaho ka na ba sa Israel?",es:"¿Has trabajado en Israel antes?",fa:"قبلاً در اسرائیل کار کرده‌اید؟",am:"ከዚህ በፊት በእስራኤል ሰርተዋል?"}},
+  {key:"live",q:{he:"את/ה מוכן/ה ללון בבית המטופל?",en:"Are you willing to live in the patient's home?",uz:"Bemor uyida yashashga tayyormisiz?",ru:"Готовы ли вы жить в доме пациента?",ro:"Sunteți dispus/dispusă să locuiți în casa pacientului?",tl:"Handa ka bang tumira sa bahay ng pasyente?",es:"¿Estás dispuesto/a a vivir en la casa del paciente?",fa:"آیا حاضرید در خانه بیمار زندگی کنید؟",am:"በታካሚው ቤት ውስጥ ለመኖር ፈቃደኛ ነዎት?"}},
+  {key:"salary",q:{he:"מהי ציפיית השכר החודשית שלך (בשקלים)?",en:"What is your expected monthly salary (in ILS)?",uz:"Oylik maosh kutilmangiz qancha (shekelda)?",ru:"Какая у вас ожидаемая зарплата (в шекелях)?",ro:"Care este salariul lunar dorit (în șekeli)?",tl:"Magkano ang inaasahang sahod mo (ILS)?",es:"¿Cuál es tu expectativa salarial mensual (en shekels)?",fa:"حقوق ماهانه مورد انتظار شما چقدر است (به شکل)؟",am:"የሚጠበቀው ወርሃዊ ደመወዝ ስንት ነው (በሸቀል)?"}},
+  {key:"dementia",q:{he:"יש לך ניסיון עם אלצהיימר/דמנציה? (כן/לא)",en:"Experience with Alzheimer's/dementia? (yes/no)",uz:"Altsgeymer/demensiya bilan tajribangiz bormi? (ha/yo'q)",ru:"Опыт с деменцией? (да/нет)",ro:"Experiență cu Alzheimer/demență? (da/nu)",tl:"May karanasan sa dementia? (oo/hindi)",es:"¿Experiencia con Alzheimer/demencia? (sí/no)",fa:"تجربه با آلزایمر/زوال عقل؟ (بله/خیر)",am:"ከአልዛይመር/የመርሳት በሽታ ጋር ልምድ አለዎት? (አዎ/አይ)"}},
+  {key:"physical",q:{he:"את/ה מסוגל/ת לטיפול גופני (הרמה, חיתולים)? (כן/לא)",en:"Can you do physical care (lifting, diapers)? (yes/no)",uz:"Jismoniy parvarish qila olasizmi (ko'tarish, tagliklar)? (ha/yo'q)",ru:"Физический уход (подъём, памперсы)? (да/нет)",ro:"Puteți face îngrijire fizică (ridicare, scutece)? (da/nu)",tl:"Kaya mo ba ang physical care? (oo/hindi)",es:"¿Puedes realizar cuidado físico (levantar, pañales)? (sí/no)",fa:"می‌توانید مراقبت جسمی انجام دهید (بلند کردن، پوشک)؟ (بله/خیر)",am:"የአካል እንክብካቤ ማድረግ ይችላሉ (ማንሳት፣ ዳይፐር)? (አዎ/አይ)"}},
+  {key:"strengths",q:{he:"מהם החוזקות שלך כמטפל/ת?",en:"What are your strengths as a caregiver?",uz:"Parvarishchi sifatida kuchli tomonlaringiz nima?",ru:"В чём ваши сильные стороны?",ro:"Care sunt punctele dvs. forte ca îngrijitor?",tl:"Ano ang mga lakas mo?",es:"¿Cuáles son tus fortalezas como cuidador/a?",fa:"نقاط قوت شما به‌عنوان یک مراقب چیست؟",am:"እንደ አስታማሚ ጥንካሬዎችዎ ምንድናቸው?"}},
+  {key:"visa",q:{he:"מה סטטוס הוויזה שלך?",en:"What is your visa status?",uz:"Viza holatingiz qanday?",ru:"Каков ваш визовый статус?",ro:"Care este statutul dvs. de viză?",tl:"Ano ang visa status mo?",es:"¿Cuál es tu estatus de visa?",fa:"وضعیت ویزای شما چیست؟",am:"የቪዛ ሁኔታዎ ምንድን ነው?"}},
 ];
 let ivState=null;
 function launchInterview(){
@@ -1932,7 +1942,8 @@ function finishInterview(){
 }
 function buildWorkerFromInterview(partial){ // sanitize AI/user output (spec)
   const a=ivState.answers;
-  const yesNo=v=>/כן|yes|oo|да|opo/i.test(v||"")?"yes":/לא|no|hindi|нет/i.test(v||"")?"no":"";
+  const yesNo=v=>/כן|yes|sí|si|\bda\b|\bha\b|oo|opo|بله|آره|አዎ|да/i.test(v||"")?"yes"
+    :/לא|\bno\b|\bnu\b|yo'?q|hindi|نه|خیر|አይ|нет/i.test(v||"")?"no":"";
   const nameParts=clean(a.name||"מטפל/ת חדש/ה",60).split(" ");
   return {
     id:uid("wrk"),dateAdded:now(),status:"זמין",source:"ראיון AI",
