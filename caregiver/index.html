@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0A2733">
+<title>חיבור בקליק — אזור המטפל/ת</title>
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<style>
+:root{--sea-950:#0A2733;--anchor:#0D4F5C;--sea-500:#2E8CA0;--sea-400:#4FA8BC;--mist:#EEF3F4;--paper:#fff;--sand:#E9B44C;
+  --like:#12A594;--like-soft:#D6F1ED;--nope:#E5563E;--ink:#12242E;--ink-2:#41565F;--ink-3:#6E8189;--line:#E4ECED;
+  --grad-cool:linear-gradient(150deg,#4FA8BC,#0D4F5C);--font:"Heebo",system-ui,-apple-system,sans-serif;
+  --shadow:0 10px 34px -10px rgba(10,39,51,.22);--shadow-lg:0 28px 64px -14px rgba(10,39,51,.4);--nav-h:64px;}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden}
+body{font-family:var(--font);color:var(--ink);background:#0A2733;display:flex;align-items:center;justify-content:center}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,select,textarea{font-family:inherit;font-size:16px}
+img{display:block;max-width:100%}
+.app{width:min(100vw,440px);height:100dvh;max-height:940px;background:var(--mist);position:relative;overflow:hidden;display:flex;flex-direction:column;box-shadow:var(--shadow-lg)}
+@media(min-width:460px){.app{border-radius:28px;height:min(100dvh,920px)}}
+.screen{position:absolute;inset:0;display:none;flex-direction:column}.screen.on{display:flex}
+.fade{animation:fade .25s}@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.big-btn{width:100%;height:54px;border-radius:16px;background:var(--sand);color:var(--sea-950);font-size:16.5px;font-weight:800;box-shadow:0 12px 26px -10px rgba(233,180,76,.55);transition:.15s;display:flex;align-items:center;justify-content:center;gap:8px}
+.big-btn:active{transform:scale(.98)}.big-btn.cool{background:var(--grad-cool);color:#fff;box-shadow:0 12px 26px -10px rgba(13,79,92,.5)}
+.big-btn.outline{background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.3);box-shadow:none}
+.big-btn.ghost{background:var(--paper);color:var(--nope);box-shadow:none;border:1.5px solid var(--line)}
+.field{margin-bottom:14px}.field label{display:block;font-size:13px;font-weight:700;color:var(--ink-2);margin-bottom:7px}
+.field input,.field select,.field textarea{width:100%;height:50px;border-radius:14px;border:1.5px solid var(--line);background:var(--paper);padding:0 15px;font-size:15px}
+.field textarea{height:auto;min-height:64px;padding:12px 15px}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--sea-400)}
+.opts{display:flex;flex-wrap:wrap;gap:8px}
+.opt{padding:10px 14px;border-radius:13px;background:var(--paper);border:1.5px solid var(--line);font-size:14px;font-weight:600;color:var(--ink-2)}
+.opt.sel{border-color:var(--anchor);background:var(--anchor);color:#fff}
+/* welcome */
+#welcome{background:radial-gradient(120% 90% at 50% 8%,#12414f,#0A2733);color:#fff;align-items:center;justify-content:center;text-align:center;padding:34px}
+.mark{width:90px;height:90px;border-radius:28px;display:grid;place-items:center;margin-bottom:22px;background:var(--grad-cool);box-shadow:0 20px 50px -10px rgba(46,140,160,.5)}
+.mark svg{width:48px;height:48px}
+#welcome h1{font-size:34px;font-weight:900;margin-bottom:8px}#welcome h1 span{color:var(--sand)}
+#welcome .sub{color:rgba(255,255,255,.55);font-size:13px;margin-bottom:6px}
+#welcome p{color:rgba(255,255,255,.72);font-size:15.5px;line-height:1.55;max-width:300px;margin-bottom:30px}
+.login-box{width:min(88vw,340px)}
+.login-box .field input{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.16);color:#fff;text-align:center;font-size:18px;letter-spacing:1px}
+.login-box .field input::placeholder{color:rgba(255,255,255,.4)}
+/* top+nav */
+.top{height:56px;flex:none;display:flex;align-items:center;gap:10px;padding:0 16px;background:var(--paper);border-bottom:1px solid var(--line);z-index:6}
+.top .logo{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;background:var(--grad-cool)}.top .logo svg{width:19px;height:19px}
+.top b{font-size:16px;font-weight:800;color:var(--sea-950)}.top b span{color:var(--sea-500)}
+.tab{flex:1;overflow-y:auto}.tab.pad{padding:16px}
+.nav{height:var(--nav-h);flex:none;background:var(--paper);border-top:1px solid var(--line);display:flex;z-index:6}
+.nav button{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--ink-3);position:relative}
+.nav button svg{width:23px;height:23px}.nav button span{font-size:10px;font-weight:700}.nav button.on{color:var(--anchor)}
+.nav .dot{position:absolute;top:8px;inset-inline-end:calc(50% - 16px);min-width:16px;height:16px;padding:0 4px;border-radius:9px;background:var(--nope);color:#fff;font-size:10px;font-weight:800;display:grid;place-items:center}
+/* profile + media */
+.p-hero{background:var(--grad-cool);color:#fff;padding:22px 20px;text-align:center;position:relative}
+.p-photo{width:104px;height:104px;border-radius:50%;margin:0 auto 12px;background:rgba(255,255,255,.15);display:grid;place-items:center;font-size:40px;font-weight:800;overflow:hidden;position:relative;cursor:pointer;border:3px solid rgba(255,255,255,.3)}
+.p-photo img{width:100%;height:100%;object-fit:cover}
+.p-photo .cam{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.45);padding:4px;font-size:10px;font-weight:700}
+.p-hero h2{font-size:22px;font-weight:800}.p-hero .st{opacity:.85;font-size:13px;margin-top:2px}
+.media-row{display:flex;gap:10px;padding:14px 16px}
+.media-btn{flex:1;background:var(--paper);border:1.5px dashed var(--line);border-radius:14px;padding:14px;text-align:center;color:var(--ink-2);font-weight:700;font-size:13px}
+.media-btn.has{border-style:solid;border-color:var(--like);color:var(--like);background:var(--like-soft)}
+.media-btn svg{width:22px;height:22px;margin:0 auto 6px;display:block}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.section-t{font-size:12px;font-weight:800;letter-spacing:.05em;color:var(--ink-3);text-transform:uppercase;margin:16px 2px 10px}
+/* request cards (families) */
+.rq{background:var(--paper);border-radius:20px;box-shadow:var(--shadow);margin-bottom:14px;overflow:hidden}
+.rq .rq-top{background:linear-gradient(150deg,#ffb27a,#e5563e);color:#fff;padding:18px 18px 16px}
+.rq .rq-top h3{font-size:21px;font-weight:800}.rq .rq-top .loc{opacity:.92;font-size:13.5px;margin-top:3px}
+.rq .rq-body{padding:14px 18px}
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:8px}
+.chip{font-size:12px;font-weight:700;padding:6px 11px;border-radius:20px;background:var(--mist);color:var(--ink-2)}
+.chip.good{background:var(--like-soft);color:var(--like)}
+.rq-act{display:flex;gap:10px;padding:0 18px 16px}
+.rq-act .big-btn{height:48px}
+.list-row{display:flex;align-items:center;gap:13px;background:var(--paper);border-radius:18px;padding:11px;margin-bottom:10px;box-shadow:0 3px 12px rgba(10,39,51,.06)}
+.av{width:54px;height:54px;border-radius:15px;flex:none;display:grid;place-items:center;color:#fff;font-weight:800;font-size:20px;background:linear-gradient(150deg,#ffb27a,#e5563e)}
+.list-row .m{flex:1;min-width:0}.list-row .m b{font-size:16px;font-weight:800;color:var(--sea-950)}
+.list-row .m span{display:block;font-size:12.5px;color:var(--ink-3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list-head{font-size:20px;font-weight:800;color:var(--sea-950);margin:4px 2px 14px}
+.badge-match{font-size:10px;font-weight:800;color:#fff;background:var(--like);padding:3px 8px;border-radius:20px}
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 30px;gap:8px;height:100%}
+.empty .ic{width:74px;height:74px;border-radius:22px;background:var(--grad-cool);display:grid;place-items:center;margin-bottom:6px}.empty .ic svg{width:36px;height:36px}
+.empty h3{font-size:20px;font-weight:800;color:var(--sea-950)}.empty p{color:var(--ink-3);font-size:14px;max-width:250px}
+/* chat */
+#chat{background:#e9eef0}
+.ct-head{height:60px;flex:none;background:var(--paper);display:flex;align-items:center;gap:11px;padding:0 14px;border-bottom:1px solid var(--line)}
+.ct-head .back{width:36px;height:36px;display:grid;place-items:center;color:var(--ink-2)}
+.ct-head .who b{font-size:15px;font-weight:800;color:var(--sea-950);display:block}.ct-head .who span{font-size:11.5px;color:var(--like)}
+.ct-body{flex:1;overflow-y:auto;padding:16px 14px;display:flex;flex-direction:column;gap:8px}
+.bub{max-width:80%;padding:9px 13px;border-radius:15px;font-size:14.5px;line-height:1.45;word-wrap:break-word}
+.bub.me{align-self:flex-end;background:var(--anchor);color:#fff;border-bottom-left-radius:4px}
+.bub.them{align-self:flex-start;background:#fff;border-bottom-right-radius:4px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.bub time{display:block;font-size:9.5px;opacity:.6;text-align:end;margin-top:3px}
+.ct-foot{flex:none;background:var(--paper);padding:10px 12px;display:flex;gap:9px;align-items:center;border-top:1px solid var(--line)}
+.ct-foot input{flex:1;height:46px;border-radius:23px;border:1px solid var(--line);background:var(--mist);padding:0 16px;font-size:15px}
+.ct-foot input:focus{outline:none;border-color:var(--sea-400)}
+.ct-foot .send{width:46px;height:46px;border-radius:50%;background:var(--anchor);color:#fff;display:grid;place-items:center;flex:none}.ct-foot .send svg{width:20px;height:20px}
+#toast{position:absolute;bottom:calc(var(--nav-h) + 16px);left:50%;transform:translateX(-50%) translateY(16px);opacity:0;background:var(--sea-950);color:#fff;padding:11px 20px;border-radius:14px;font-size:14px;font-weight:600;z-index:50;transition:.25s;box-shadow:var(--shadow);white-space:nowrap;pointer-events:none}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+.scrim{position:absolute;inset:0;z-index:40;background:rgba(10,39,51,.55);display:flex;align-items:center;justify-content:center;padding:24px}
+.modal{width:100%;max-width:340px;background:#fff;border-radius:22px;padding:22px;text-align:center;box-shadow:var(--shadow-lg)}
+.modal .mi{width:60px;height:60px;border-radius:20px;display:grid;place-items:center;margin:0 auto 14px;background:var(--like-soft);color:var(--like)}
+.modal h3{font-size:20px;font-weight:800;color:var(--sea-950);margin-bottom:6px}.modal p{font-size:14px;color:var(--ink-2);margin-bottom:16px;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <!-- LOGIN -->
+  <section class="screen on" id="welcome">
+    <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5"/><path d="M12 7.5V21M5 12H3s0 6 9 9c9-3 9-9 9-9h-2M5 12a7 7 0 0 0 14 0"/></svg></div>
+    <h1>חיבור <span>בקליק</span></h1>
+    <div class="sub">אזור המטפל/ת</div>
+    <p>היכנס/י עם מספר תעודת זהות או דרכון — וראה/י אילו משפחות מעוניינות בך.</p>
+    <div class="login-box">
+      <div class="field"><input id="li-id" inputmode="text" placeholder="ת״ז / מספר דרכון"></div>
+      <button class="big-btn" onclick="doLogin()">כניסה / הרשמה</button>
+    </div>
+  </section>
+
+  <!-- MAIN -->
+  <section class="screen" id="main">
+    <div class="top"><div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5"/><path d="M12 7.5V21M5 12H3s0 6 9 9c9-3 9-9 9-9h-2M5 12a7 7 0 0 0 14 0"/></svg></div><b id="topTitle">הפרופיל שלי</b></div>
+    <div class="tab" id="tab"></div>
+    <nav class="nav" id="nav"></nav>
+  </section>
+
+  <!-- CHAT -->
+  <section class="screen" id="chat"></section>
+
+  <input type="file" id="photoInput" accept="image/*" style="display:none">
+  <div id="modalRoot"></div><div id="toast"></div>
+</div>
+<script>
+"use strict";
+const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const money=n=>n?Number(n).toLocaleString("he-IL")+" ₪":"—";
+const nowT=()=>Date.now(), timeStr=t=>new Date(t).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
+const I={user:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  heart:'<path d="M12 21s-8-5.3-10-10a5.5 5.5 0 0 1 10-3 5.5 5.5 0 0 1 10 3c-2 4.7-10 10-10 10z"/>',
+  match:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  chat:'<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
+  cam:'<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
+  video:'<path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/>',
+  x:'<path d="M18 6 6 18M6 6l12 12"/>',check:'<path d="M20 6 9 17l-5-5"/>',send:'<path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/>',logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>'};
+const svg=(p,w=22)=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:${w}px;height:${w}px">${p}</svg>`;
+const svgF=(p,w=22)=>`<svg viewBox="0 0 24 24" fill="currentColor" style="width:${w}px;height:${w}px">${p}</svg>`;
+const CITIES=["תל אביב","ירושלים","חיפה","באר שבע","רמת גן","פתח תקווה","נתניה","ראשון לציון","אשדוד","הרצליה","חולון","כפר סבא"];
+const NAT=["מולדובה","פיליפינים","הודו","נפאל","אוזבקיסטן","רומניה","סרי לנקה","ישראל","אחר"];
+
+/* ---------- Firebase (shared with family app) ---------- */
+const firebaseConfig={apiKey:"AIzaSyAHFamD1InXLSe1oPFWuuBk_SroK6duVHg",authDomain:"ogen-crm.firebaseapp.com",projectId:"ogen-crm",storageBucket:"ogen-crm.firebasestorage.app",messagingSenderId:"111888037947",appId:"1:111888037947:web:00b833b907138c1309041e"};
+let fdb=null;
+try{firebase.initializeApp(firebaseConfig);fdb=firebase.firestore();}catch(e){console.warn("fb",e);}
+const cgDoc=id=>fdb.collection("hibur_cg").doc(String(id));
+const connCol=()=>fdb.collection("hibur_conn");
+const AU=x=>firebase.firestore.FieldValue.arrayUnion(x);
+
+/* ---------- state ---------- */
+let me=null, curTab="profile", conns=[], connUnsub=null, chatConn=null;
+const SESS="hbcg_session";
+function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("on");clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove("on"),2000);}
+function go(id){$$(".screen").forEach(s=>s.classList.remove("on"));const el=$("#"+id);el.classList.add("on");el.classList.add("fade");setTimeout(()=>el.classList.remove("fade"),260);}
+
+/* ---------- login ---------- */
+async function doLogin(){
+  const id=$("#li-id").value.trim().replace(/\s/g,"");
+  if(id.length<4){toast("הזינו ת״ז או דרכון");return;}
+  if(!fdb){toast("אין חיבור לרשת");return;}
+  toast("מתחבר…");
+  let d=null; try{const s=await cgDoc(id).get();d=s.exists?s.data():null;}catch(e){console.warn(e);}
+  if(!d){ d={id,name:"",nationality:"",gender:"female",age:"",city:"",languages:"עברית",experience:"",expectedSalary:5800,
+    canHoist:"yes",canDiapers:"yes",knowsDementia:"no",status:"זמין",photo:"",video:"",phone:"",createdAt:nowT()};
+    try{await cgDoc(id).set(d);}catch(e){} }
+  me=d; localStorage.setItem(SESS,id); enterApp();
+}
+function logout(){localStorage.removeItem(SESS);if(connUnsub)connUnsub();me=null;go("welcome");}
+function saveMe(){if(!fdb||!me)return;try{cgDoc(me.id).set(JSON.parse(JSON.stringify(me)),{merge:true});}catch(e){}}
+
+/* ---------- app shell ---------- */
+const TABS=[["profile","פרופיל",I.user],["requests","פניות",I.heart],["matches","מאצ'ים",I.match],["chats","צ'אט",I.chat]];
+function enterApp(){subscribeConns();go("main");switchTab(me.name?"requests":"profile");}
+function renderNav(){
+  const pend=conns.filter(c=>c.cgId===me.id&&c.famLiked&&!c.cgLiked).length;
+  const unread=conns.filter(c=>c.famLiked&&c.cgLiked).reduce((n,c)=>n+(c.msgs||[]).filter(m=>m.from==="fam"&&!(me.readAt&&m.at<=me.readAt[c.id||connId(c)])).length,0);
+  $("#nav").innerHTML=TABS.map(([id,label,icon])=>`<button class="${curTab===id?"on":""}" data-tab="${id}">${curTab===id?svgF(icon,23):svg(icon,23)}<span>${label}</span>${id==="requests"&&pend?`<i class="dot">${pend}</i>`:""}</button>`).join("");
+  $$("#nav [data-tab]").forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
+}
+function switchTab(t){curTab=t;$("#topTitle").textContent=TABS.find(x=>x[0]===t)[1];renderNav();
+  ({profile:renderProfile,requests:renderRequests,matches:renderMatches,chats:renderChats}[t])();}
+
+/* ---------- connections (shared with family app) ---------- */
+const connId=c=>c.famId+"__"+c.cgId;
+function subscribeConns(){
+  if(!fdb||!me)return; if(connUnsub)connUnsub();
+  connUnsub=connCol().where("cgId","==",me.id).onSnapshot(snap=>{
+    conns=snap.docs.map(d=>Object.assign({_id:d.id},d.data()));
+    if($("#main").classList.contains("on"))switchTab(curTab);
+    if($("#chat").classList.contains("on")&&chatConn){const c=conns.find(x=>x._id===chatConn._id);if(c){chatConn=c;renderChat(c);}}
+  },e=>console.warn("conn sub",e));
+}
+
+/* ---------- PROFILE + MEDIA ---------- */
+function renderProfile(){const tab=$("#tab");tab.className="tab";const w=me;
+  const photo=w.photo?`<img src="${esc(w.photo)}">`:esc((w.name||"?")[0]||"👤");
+  tab.innerHTML=`
+    <div class="p-hero">
+      <div class="p-photo" onclick="$('#photoInput').click()">${photo}<div class="cam">${w.photo?"החלף":"הוסף תמונה"}</div></div>
+      <h2>${esc(w.name||"מטפל/ת חדש/ה")}</h2><div class="st">${esc(w.city||"")} ${w.nationality?"· "+esc(w.nationality):""}</div>
+    </div>
+    <div class="media-row">
+      <div class="media-btn ${w.photo?"has":""}" onclick="$('#photoInput').click()">${svg(I.cam,22)}${w.photo?"תמונה הועלתה ✓":"העלאת תמונה"}</div>
+      <div class="media-btn ${w.video?"has":""}" onclick="setVideo()">${svg(I.video,22)}${w.video?"סרטון קיים ✓":"קישור לסרטון"}</div>
+    </div>
+    <div style="padding:6px 16px 90px">
+      <div class="section-t">פרטים אישיים</div>
+      <div class="field"><label>שם מלא</label><input id="f-name" value="${esc(w.name)}" placeholder="שם פרטי ומשפחה"></div>
+      <div class="grid2">
+        <div class="field"><label>לאום</label><select id="f-nat">${["",...NAT].map(n=>`<option ${w.nationality===n?"selected":""}>${n||"—"}</option>`).join("")}</select></div>
+        <div class="field"><label>מין</label><select id="f-gender"><option value="female" ${w.gender==="female"?"selected":""}>נקבה</option><option value="male" ${w.gender==="male"?"selected":""}>זכר</option></select></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>גיל</label><input id="f-age" type="number" value="${esc(w.age)}"></div>
+        <div class="field"><label>עיר</label><select id="f-city"><option value="">—</option>${CITIES.map(c=>`<option ${w.city===c?"selected":""}>${c}</option>`).join("")}</select></div>
+      </div>
+      <div class="field"><label>טלפון (וואטסאפ)</label><input id="f-phone" value="${esc(w.phone)}" placeholder="050-0000000"></div>
+      <div class="field"><label>שפות</label><input id="f-lang" value="${esc(w.languages)}" placeholder="עברית, אנגלית…"></div>
+      <div class="grid2">
+        <div class="field"><label>שנות ניסיון</label><input id="f-exp" type="number" value="${esc(w.experience)}"></div>
+        <div class="field"><label>ציפיית שכר</label><input id="f-sal" type="number" value="${esc(w.expectedSalary)}"></div>
+      </div>
+      <div class="section-t">יכולות טיפול</div>
+      <div class="field"><label>מנוף/הרמה</label>${yn("hoist",w.canHoist)}</div>
+      <div class="field"><label>טיפול אישי (חיתולים)</label>${yn("diapers",w.canDiapers)}</div>
+      <div class="field"><label>ניסיון עם דמנציה/אלצהיימר</label>${yn("dementia",w.knowsDementia)}</div>
+      <button class="big-btn cool" onclick="saveProfile()">שמירת פרופיל</button>
+      <button class="big-btn" style="margin-top:10px;background:transparent;color:var(--nope);box-shadow:none" onclick="logout()">${svg(I.logout,18)} התנתקות</button>
+    </div>`;
+}
+const yn=(k,v)=>`<div class="opts" id="yn-${k}">${[["yes","כן"],["no","לא"]].map(([val,l])=>`<button class="opt ${v===val?"sel":""}" data-v="${val}" onclick="pickYN('${k}','${val}')">${l}</button>`).join("")}</div>`;
+let ynState={};
+function pickYN(k,v){ynState[k]=v;$$("#yn-"+k+" .opt").forEach(b=>b.classList.toggle("sel",b.dataset.v===v));}
+function saveProfile(){
+  me.name=$("#f-name").value.trim(); me.nationality=$("#f-nat").value; me.gender=$("#f-gender").value;
+  me.age=$("#f-age").value; me.city=$("#f-city").value; me.phone=$("#f-phone").value.trim();
+  me.languages=$("#f-lang").value.trim(); me.experience=$("#f-exp").value; me.expectedSalary=+$("#f-sal").value||0;
+  me.canHoist=ynState.hoist||me.canHoist; me.canDiapers=ynState.diapers||me.canDiapers; me.knowsDementia=ynState.dementia||me.knowsDementia;
+  saveMe(); toast("הפרופיל נשמר ✓"); renderProfile();
+}
+/* photo upload → compress → dataURL (stored in Firestore doc, no Storage needed) */
+$("#photoInput").onchange=e=>{const f=e.target.files[0];if(!f)return;
+  const img=new Image();const rd=new FileReader();
+  rd.onload=()=>{img.onload=()=>{
+    const cv=document.createElement("canvas");const max=560;let{width:w,height:h}=img;
+    if(w>h){if(w>max){h=h*max/w;w=max;}}else{if(h>max){w=w*max/h;h=max;}}
+    cv.width=w;cv.height=h;cv.getContext("2d").drawImage(img,0,0,w,h);
+    me.photo=cv.toDataURL("image/jpeg",0.72); saveMe(); toast("התמונה הועלתה ✓"); renderProfile();
+  };img.src=rd.result;};rd.readAsDataURL(f);};
+function setVideo(){
+  $("#modalRoot").innerHTML=`<div class="scrim" onclick="if(event.target===this)this.remove()"><div class="modal">
+    <div class="mi">${svg(I.video,28)}</div><h3>סרטון היכרות</h3>
+    <p>הדבק/י קישור לסרטון (יוטיוב / וואטסאפ / דרייב). המשפחות יראו אותו בפרופיל שלך.</p>
+    <div class="field"><input id="vurl" placeholder="https://..." value="${esc(me.video||"")}" dir="ltr" style="text-align:left"></div>
+    <button class="big-btn cool" onclick="me.video=$('#vurl').value.trim();saveMe();$('#modalRoot').innerHTML='';toast('נשמר ✓');renderProfile()">שמירה</button>
+  </div></div>`;
+}
+
+/* ---------- REQUESTS (families interested) ---------- */
+function renderRequests(){const tab=$("#tab");tab.className="tab pad";
+  if(!me.name){tab.innerHTML=emptyState(I.user,"קודם השלימו פרופיל","מלאו את הפרטים והעלו תמונה — כדי שמשפחות יוכלו למצוא אתכם");return;}
+  const rq=conns.filter(c=>c.cgId===me.id&&c.famLiked&&!c.cgLiked);
+  if(!rq.length){tab.innerHTML=emptyState(I.heart,"אין פניות חדשות","כשמשפחה תסמן שהיא מעוניינת בך — היא תופיע כאן, ותוכל/י להשיב");return;}
+  tab.innerHTML=`<div class="list-head">${rq.length} משפחות מעוניינות בך</div>`+rq.map(c=>{const f=c.fam||{};
+    return `<div class="rq">
+      <div class="rq-top"><h3>${esc(f.name||"משפחה")}</h3><div class="loc">${esc(f.city||"")} · תקציב ${money(f.budget)}</div></div>
+      <div class="rq-body"><div class="chips">
+        ${f.needHoist==="yes"?'<span class="chip good">🛠️ נדרש מנוף</span>':""}
+        ${f.needDementia==="yes"?'<span class="chip good">🧠 דמנציה</span>':""}
+        ${f.needDiapers==="yes"?'<span class="chip good">🧴 טיפול אישי</span>':""}
+        ${f.gender?`<span class="chip">${f.gender==="female"?"מבקשים מטפלת":"מבקשים מטפל"}</span>`:""}
+        ${f.req?`<span class="chip">שפה: ${esc(f.req)}</span>`:""}
+      </div></div>
+      <div class="rq-act">
+        <button class="big-btn ghost" style="flex:none;width:56px" onclick="respond('${c._id}',false)">${svg(I.x,22)}</button>
+        <button class="big-btn cool" onclick="respond('${c._id}',true)">מעוניין/ת! ♥</button>
+      </div></div>`;}).join("");
+}
+function respond(cid,yes){
+  connCol().doc(cid).set({cgLiked:yes,cgId:me.id,cg:cgSnap(),updatedAt:nowT()},{merge:true})
+    .then(()=>{ if(yes){const c=conns.find(x=>x._id===cid);showMatch(c&&c.fam?c.fam.name:"המשפחה");} })
+    .catch(e=>console.warn(e));
+  if(!yes)toast("דילגת");
+}
+const cgSnap=()=>({name:me.name,lastName:"",city:me.city,nationality:me.nationality,photo:me.photo||"",age:me.age||"",phone:me.phone||""});
+function showMatch(famName){
+  $("#modalRoot").innerHTML=`<div class="scrim" onclick="if(event.target===this)this.remove()"><div class="modal">
+    <div class="mi">${svgF(I.heart,30)}</div><h3>יש התאמה! 🎉</h3>
+    <p>גם ${esc(famName)} מעוניינת. אפשר להתחיל לשוחח ולתאם היכרות.</p>
+    <button class="big-btn cool" onclick="$('#modalRoot').innerHTML='';switchTab('chats')">לצ'אט 💬</button>
+  </div></div>`;
+}
+
+/* ---------- MATCHES + CHATS ---------- */
+function matchedConns(){return conns.filter(c=>c.famLiked&&c.cgLiked);}
+function renderMatches(){const tab=$("#tab");tab.className="tab pad";const ms=matchedConns();
+  if(!ms.length){tab.innerHTML=emptyState(I.match,"אין מאצ'ים עדיין","כשתשיב/י בחיוב לפנייה של משפחה — היא תופיע כאן");return;}
+  tab.innerHTML=`<div class="list-head">${ms.length} מאצ'ים</div>`+ms.map(c=>rowFam(c,`onclick="openChat('${c._id}')"`,`<button class="big-btn cool" style="width:auto;height:38px;padding:0 16px;font-size:13px">שוחח/י 💬</button>`)).join("");
+}
+function renderChats(){const tab=$("#tab");tab.className="tab pad";const cs=matchedConns().filter(c=>(c.msgs||[]).length).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  if(!cs.length){tab.innerHTML=emptyState(I.chat,"אין שיחות עדיין","התחילו שיחה מתוך מאצ'");return;}
+  tab.innerHTML=`<div class="list-head">שיחות</div>`+cs.map(c=>{const lm=(c.msgs||[]).slice(-1)[0];
+    return `<div class="list-row" onclick="openChat('${c._id}')"><div class="av">${esc((c.fam?.name||"?")[0])}</div>
+    <div class="m"><b>${esc(c.fam?.name||"משפחה")}</b><span>${esc(lm?lm.text:"")}</span></div>
+    <div style="text-align:center"><div style="font-size:11px;color:var(--ink-3)">${lm?timeStr(lm.at):""}</div></div></div>`;}).join("");
+}
+function rowFam(c,attr,side){const f=c.fam||{};return `<div class="list-row" ${attr}><div class="av">${esc((f.name||"?")[0])}</div>
+  <div class="m"><b>${esc(f.name||"משפחה")}</b><span>${esc(f.city||"")} · תקציב ${money(f.budget)}</span></div><div>${side||""}</div></div>`;}
+function emptyState(icon,h,p){return `<div class="empty"><div class="ic">${svg(icon,36)}</div><h3>${h}</h3><p>${p}</p></div>`;}
+
+/* ---------- CHAT ---------- */
+function openChat(cid){chatConn=conns.find(c=>c._id===cid);if(!chatConn)return;renderChat(chatConn);go("chat");}
+function renderChat(c){const f=c.fam||{};const msgs=c.msgs||[];
+  $("#chat").innerHTML=`
+    <div class="ct-head"><button class="back" onclick="go('main');switchTab('chats')">→</button>
+      <div class="av" style="width:40px;height:40px;border-radius:50%;font-size:16px">${esc((f.name||"?")[0])}</div>
+      <div class="who"><b>${esc(f.name||"משפחה")}</b><span>${esc(f.city||"")}</span></div></div>
+    <div class="ct-body" id="ctBody">${msgs.length?msgs.map(m=>`<div class="bub ${m.from==="cg"?"me":"them"}">${esc(m.text)}<time>${timeStr(m.at)}</time></div>`).join(""):`<div style="text-align:center;color:var(--ink-3);font-size:12px;padding:8px">תחילת השיחה עם ${esc(f.name||"המשפחה")}</div>`}</div>
+    <div class="ct-foot"><input id="ctInput" placeholder="הקלד/י הודעה…" onkeydown="if(event.key==='Enter')sendMsg()"><button class="send" onclick="sendMsg()">${svg(I.send,20)}</button></div>`;
+  const b=$("#ctBody");b.scrollTop=b.scrollHeight;
+}
+function sendMsg(){const inp=$("#ctInput");const t=inp.value.trim();if(!t||!chatConn)return;inp.value="";
+  const msg={from:"cg",text:t,at:nowT()};
+  connCol().doc(chatConn._id).set({msgs:AU(msg),updatedAt:nowT()},{merge:true}).catch(e=>console.warn(e));
+  chatConn.msgs=(chatConn.msgs||[]).concat(msg);renderChat(chatConn);
+}
+
+/* ---------- boot ---------- */
+async function init(){
+  const sid=localStorage.getItem(SESS);
+  if(sid&&fdb){ try{const s=await cgDoc(sid).get();if(s.exists){me=s.data();enterApp();return;}}catch(e){} }
+  go("welcome");
+}
+init();
+</script>
+</body>
+</html>

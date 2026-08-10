@@ -467,16 +467,23 @@ const TABS=[["discover","גלה",I.discover],["likes","לייקים",I.likes],["
 function enterApp(){
   caregivers=loadCaregivers();
   buildDeck();
-  subscribeCloud();
+  subscribeCloud(); subscribeFamConns();
   go("main"); switchTab("discover");
+  fetchCloudCaregivers().then(cloud=>{
+    if(!cloud.length)return;
+    const ids=new Set(caregivers.map(c=>c.id));
+    cloud.forEach(c=>{if(!ids.has(c.id))caregivers.unshift(c);}); // real registered caregivers first
+    buildDeck(); if(curTab==="discover")renderDiscover();
+  });
 }
 function renderNav(){
-  const unread=Object.values(me.chats||{}).reduce((n,arr)=>n+arr.filter(m=>m.from==="them"&&!m.read).length,0);
+  const matches=famConns.filter(c=>c.famLiked&&c.cgLiked);
+  const unread=matches.reduce((n,c)=>n+(c.msgs||[]).filter(m=>m.from==="cg"&&m.at>(readAt[c._id]||0)).length,0);
   $("#nav").innerHTML=TABS.map(([id,label,icon])=>`
     <button class="${curTab===id?"on":""}" data-tab="${id}">
       ${curTab===id?svgF(icon,23):svg(icon,23)}<span>${label}</span>
       ${id==="chats"&&unread?`<i class="dot">${unread}</i>`:""}
-      ${id==="matches"&&me.matches.length?`<i class="dot" style="background:var(--like)">${me.matches.length}</i>`:""}
+      ${id==="matches"&&matches.length?`<i class="dot" style="background:var(--like)">${matches.length}</i>`:""}
     </button>`).join("");
   $$("#nav [data-tab]").forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
 }
@@ -562,19 +569,41 @@ function swipe(kind){const card=$(".card.top");if(!card)return;card.style.transi
 function decide(kind){
   const c=deck[deckIdx];if(!c)return;const w=c.w;
   if(!me.seen.includes(w.id))me.seen.push(w.id);
-  if(kind==="like"){me.liked.push(w.id);maybeMatch(w,c.score);toast("נוסף ללייקים ♥");}
+  if(kind==="like"){me.liked.push(w.id);familyLike(w);toast("נוסף ללייקים ♥");}
   else me.passed.push(w.id);
   saveUsers();deckIdx++;
   setTimeout(()=>{renderDiscover();renderNav();},300);
 }
-/* simulate mutual interest: ~55% of likes "like back" → match (real: caregiver app / coordinator) */
-function maybeMatch(w,score){
-  const hash=[...w.id].reduce((a,c)=>a+c.charCodeAt(0),0);
-  if((hash+score)%100<72){
-    me.matches.push({id:w.id,at:now(),score});
-    me.chats[w.id]=me.chats[w.id]||[];
-    setTimeout(()=>showMatchModal(w),650);
-  }
+/* ---------- shared connections (REAL two-sided matching + chat, via hibur_conn) ---------- */
+let famConns=[], connUnsub2=null, readAt={}, matchedIds=[];
+const connCol=()=>fdb?fdb.collection("hibur_conn"):null;
+const AU=x=>firebase.firestore.FieldValue.arrayUnion(x);
+const connFor=cgId=>famConns.find(c=>c.cgId===cgId);
+function subscribeFamConns(){
+  if(!connCol()||!me)return; if(connUnsub2)connUnsub2();
+  connUnsub2=connCol().where("famId","==",me.id).onSnapshot(snap=>{
+    famConns=snap.docs.map(d=>Object.assign({_id:d.id},d.data()));
+    const nowMatched=famConns.filter(c=>c.famLiked&&c.cgLiked).map(c=>c.cgId);
+    const fresh=nowMatched.filter(id=>!matchedIds.includes(id));
+    matchedIds=nowMatched;
+    if($("#main").classList.contains("on"))switchTab(curTab);
+    if($("#chat-thread").classList.contains("on")&&chatId){const w=cgById(chatId)||(connFor(chatId)||{}).cg;if(w)renderChatThread(w);}
+    fresh.forEach(id=>{const w=cgById(id)||(connFor(id)||{}).cg;if(w)showMatchModal(w);});
+  },e=>console.warn("famconn",e));
+}
+function familyLike(w){
+  if(!connCol())return;
+  connCol().doc(me.id+"__"+w.id).set({famId:me.id,cgId:w.id,
+    fam:{name:me.name,city:me.city,gender:me.family.gender,budget:me.family.offeredSalary,
+      needHoist:me.family.needsHoist,needDementia:me.family.hasDementia,needDiapers:me.family.needsDiapers,req:me.family.requirements},
+    cg:{name:w.name,lastName:w.lastName||"",city:w.city||"",nationality:w.nationality||"",photo:w.photo||"",age:w.age||"",phone:w.phone||""},
+    famLiked:true,updatedAt:now()},{merge:true}).catch(e=>console.warn("like",e));
+}
+async function fetchCloudCaregivers(){
+  if(!fdb)return [];
+  try{const s=await fdb.collection("hibur_cg").get();
+    return s.docs.map(d=>d.data()).filter(w=>w.name).map((w,i)=>enrich(w,100+i));
+  }catch(e){console.warn("cg fetch",e);return [];}
 }
 function showMatchModal(w){
   $("#modalRoot").innerHTML=`<div class="scrim" onclick="if(event.target===this)this.remove()"><div class="modal match-anim">
@@ -631,41 +660,41 @@ function openDetail(id){detailId=id;const w=cgById(id);const c={w,...scoreMatch(
 }
 function detailDecide(kind){const id=detailId;const w=cgById(id);
   if(!me.seen.includes(id))me.seen.push(id);
-  if(kind==="like"){if(!me.liked.includes(id)){me.liked.push(id);maybeMatch(w,scoreMatch(me.family,w).score||100);}toast("נוסף ללייקים ♥");}
+  if(kind==="like"){if(!me.liked.includes(id)){me.liked.push(id);familyLike(w);}toast("נוסף ללייקים ♥");}
   else{if(!me.passed.includes(id))me.passed.push(id);}
   // remove from deck
   deck=deck.filter(x=>x.w.id!==id);if(deckIdx>deck.length)deckIdx=deck.length;
-  saveUsers();go("main");switchTab(kind==="like"&&me.matches.some(m=>m.id===id)?"matches":curTab==="discover"?"discover":curTab);
+  saveUsers();go("main");switchTab(curTab==="discover"?"discover":curTab);
 }
-function openChatOrWa(id){ if(me.matches.some(m=>m.id===id)) openChat(id); else toast("נמתין שהמטפל/ת יאשר/תאשר — נעדכן אותך"); }
+function openChatOrWa(id){ const c=connFor(id); if(c&&c.famLiked&&c.cgLiked) openChat(id); else toast("נמתין שהמטפל/ת יאשר/תאשר — נעדכן אותך"); }
 
 /* ---------- LIKES ---------- */
 function renderLikes(){const tab=$("#tab");tab.className="tab pad";
   if(!me.liked.length){tab.innerHTML=emptyState(I.likes,"עדיין לא אהבת אף אחד","חזור/י ל\"גלה\" והחלק/י ♥ על מטפלים שמוצאים חן");return;}
   tab.innerHTML=`<div class="list-head">אהבת ${me.liked.length} מטפלים</div>`+
-    me.liked.map(id=>{const w=cgById(id);if(!w)return"";const matched=me.matches.some(m=>m.id===id);
-      return rowFor(w,`onclick="openDetail('${id}')"`,matched?`<span class="badge-match">מאצ' ✓</span>`:`<span class="badge-wait">ממתין</span>`);
+    me.liked.map(id=>{const w=cgById(id)||(connFor(id)||{}).cg;if(!w)return"";const c=connFor(id);const matched=c&&c.famLiked&&c.cgLiked;
+      return rowFor(w,`onclick="${matched?`openChat('${id}')`:`openDetail('${id}')`}"`,matched?`<span class="badge-match">מאצ' ✓</span>`:`<span class="badge-wait">ממתין</span>`);
     }).join("");
 }
 /* ---------- MATCHES ---------- */
 function renderMatches(){const tab=$("#tab");tab.className="tab pad";
-  if(!me.matches.length){tab.innerHTML=emptyState(I.match,"אין מאצ'ים עדיין","כשמטפל/ת שאהבת מעוניין/ת גם — הוא/היא יופיעו כאן ותוכל/י לשוחח");return;}
-  tab.innerHTML=`<div class="list-head">${me.matches.length} מאצ'ים</div><div class="list-sub">התאמה הדדית — אפשר לשוחח ולתאם היכרות.</div>`+
-    me.matches.slice().sort((a,b)=>b.at-a.at).map(mm=>{const w=cgById(mm.id);if(!w)return"";
-      return rowFor(w,`onclick="openChat('${mm.id}')"`,`<button class="big-btn cool" style="width:auto;height:38px;padding:0 16px;font-size:13px">שוחח/י 💬</button>`,true);
+  const ms=famConns.filter(c=>c.famLiked&&c.cgLiked);
+  if(!ms.length){tab.innerHTML=emptyState(I.match,"אין מאצ'ים עדיין","כשמטפל/ת שאהבת מעוניין/ת גם — הוא/היא יופיעו כאן ותוכל/י לשוחח");return;}
+  tab.innerHTML=`<div class="list-head">${ms.length} מאצ'ים</div><div class="list-sub">התאמה הדדית — אפשר לשוחח ולתאם היכרות.</div>`+
+    ms.slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).map(c=>{const w=cgById(c.cgId)||c.cg||{name:"מטפל/ת"};
+      return rowFor(w,`onclick="openChat('${c.cgId}')"`,`<button class="big-btn cool" style="width:auto;height:38px;padding:0 16px;font-size:13px">שוחח/י 💬</button>`,true);
     }).join("");
 }
 /* ---------- CHATS list ---------- */
 function renderChats(){const tab=$("#tab");tab.className="tab pad";
-  const ids=Object.keys(me.chats||{}).filter(id=>me.chats[id].length);
-  if(!ids.length){tab.innerHTML=emptyState(I.chat,"אין שיחות עדיין","התחל/י שיחה מתוך מאצ' — וההתכתבות גם תישלח לוואטסאפ של המטפל/ת");return;}
+  const cs=famConns.filter(c=>c.famLiked&&c.cgLiked&&(c.msgs||[]).length).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  if(!cs.length){tab.innerHTML=emptyState(I.chat,"אין שיחות עדיין","התחל/י שיחה מתוך מאצ' — וההתכתבות גם תישלח לוואטסאפ של המטפל/ת");return;}
   tab.innerHTML=`<div class="list-head">שיחות</div>`+
-    ids.sort((a,b)=>last(me.chats[b]).at-last(me.chats[a]).at).map(id=>{const w=cgById(id);if(!w)return"";
-      const msgs=me.chats[id];const lm=last(msgs);const unread=msgs.filter(m=>m.from==="them"&&!m.read).length;
-      return `<div class="list-row" onclick="openChat('${id}')">
+    cs.map(c=>{const w=cgById(c.cgId)||c.cg||{name:"מטפל/ת"};const lm=last(c.msgs);const unread=(c.msgs||[]).filter(m=>m.from==="cg"&&m.at>(readAt[c._id]||0)).length;
+      return `<div class="list-row" onclick="openChat('${c.cgId}')">
         ${avEl(w)}
-        <div class="m"><b>${esc(w.name)} ${esc(w.lastName||"")}</b><span>${esc(lm.text)}</span></div>
-        <div class="side"><div class="time">${timeStr(lm.at)}</div>${unread?`<span class="badge-match" style="margin-top:5px;display:inline-block">${unread}</span>`:""}</div>
+        <div class="m"><b>${esc(w.name)} ${esc(w.lastName||"")}</b><span>${esc(lm?lm.text:"")}</span></div>
+        <div class="side"><div class="time">${lm?timeStr(lm.at):""}</div>${unread?`<span class="badge-match" style="margin-top:5px;display:inline-block">${unread}</span>`:""}</div>
       </div>`;
     }).join("");
 }
@@ -680,22 +709,22 @@ function avEl(w,online){const inner=w.photo?`<img src="${esc(w.photo)}">`:esc((w
 function emptyState(icon,h,p){return `<div class="empty" style="position:static;height:100%"><div class="ic">${svg(icon,36)}</div><h3>${h}</h3><p>${p}</p></div>`;}
 
 /* ---------- CHAT THREAD ---------- */
-function openChat(id){chatId=id;const w=cgById(id);me.chats[id]=me.chats[id]||[];
-  // mark read
-  me.chats[id].forEach(m=>{if(m.from==="them")m.read=true;});saveUsers();
+function openChat(cgId){chatId=cgId;const c=connFor(cgId);if(c)readAt[c._id]=now();
+  const w=cgById(cgId)||(c&&c.cg)||{name:"מטפל/ת"};
   renderChatThread(w);go("chat-thread");renderNav();
 }
 function renderChatThread(w){
-  const msgs=me.chats[w.id];
+  const c=connFor(w.id)||connFor(chatId);const msgs=(c&&c.msgs)||[];
+  const phone=(c&&c.cg&&c.cg.phone)||w.phone;
   $("#chat-thread").innerHTML=`
     <div class="ct-head">
       <button class="back" onclick="go('main');switchTab('chats')">→</button>
       ${avEl(w)}
       <div class="who"><b>${esc(w.name)} ${esc(w.lastName||"")}</b><span>מקוון/ת</span></div>
-      <a class="wa" href="${waLink(w.phone)}" target="_blank" title="פתח בוואטסאפ">${svgF(I.wa,22)}</a>
+      ${phone?`<a class="wa" href="${waLink(phone)}" target="_blank" title="פתח בוואטסאפ">${svgF(I.wa,22)}</a>`:""}
     </div>
     <div class="ct-body" id="ctBody">
-      ${msgs.length?msgs.map(m=>bubble(m)).join(""):`<div class="wa-note">זו תחילת השיחה עם ${esc(w.name)}. ההודעות יישלחו גם לוואטסאפ שלה/ו.</div>`}
+      ${msgs.length?msgs.map(m=>bubble(m)).join(""):`<div class="wa-note">זו תחילת השיחה עם ${esc(w.name)}. אפשר גם לפתוח וואטסאפ בכפתור שלמעלה.</div>`}
     </div>
     <div class="ct-foot">
       <input id="ctInput" placeholder="הקלד/י הודעה…" onkeydown="if(event.key==='Enter')sendMsg()">
@@ -703,19 +732,13 @@ function renderChatThread(w){
     </div>`;
   const b=$("#ctBody");b.scrollTop=b.scrollHeight;
 }
-function bubble(m){return `<div class="bub ${m.from==="me"?"me":"them"}">${esc(m.text)}<time>${timeStr(m.at)}${m.from==="me"?` <span class="rr">${m.read?"✓✓":"✓"}</span>`:""}</time></div>`;}
-function sendMsg(){const inp=$("#ctInput");const t=inp.value.trim();if(!t)return;inp.value="";
-  const w=cgById(chatId);me.chats[chatId].push({from:"me",text:t,at:now(),read:false});saveUsers();
-  renderChatThread(w);
-  // simulate WhatsApp-bridged reply (real: WhatsApp Business API via automation)
-  setTimeout(()=>{
-    if(!me.chats[chatId])return;
-    const replies=["שלום! תודה על הפנייה 😊 אשמח להכיר.","כן, אני פנויה להתחיל. מתי נוח לכם לשוחח?","בטח, יש לי ניסיון עם זה. אפשר לתאם היכרות?"];
-    const r=replies[me.chats[chatId].filter(m=>m.from==="me").length%replies.length];
-    me.chats[chatId].push({from:"them",text:r,at:now(),read:$("#chat-thread").classList.contains("on")});saveUsers();
-    if($("#chat-thread").classList.contains("on")&&chatId===w.id)renderChatThread(w);
-    renderNav();
-  },1400+Math.random()*900);
+function bubble(m){return `<div class="bub ${m.from==="fam"?"me":"them"}">${esc(m.text)}<time>${timeStr(m.at)}</time></div>`;}
+function sendMsg(){const inp=$("#ctInput");const t=inp.value.trim();if(!t)return;
+  const c=connFor(chatId);if(!c||!connCol()){toast("אין חיבור");return;}
+  inp.value=""; const msg={from:"fam",text:t,at:now()};
+  connCol().doc(c._id).set({msgs:AU(msg),updatedAt:now()},{merge:true}).catch(e=>console.warn(e));
+  c.msgs=(c.msgs||[]).concat(msg); readAt[c._id]=now();
+  renderChatThread(cgById(chatId)||c.cg||{name:"מטפל/ת"});
 }
 
 /* ---------- PROFILE (self) ---------- */
