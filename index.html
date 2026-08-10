@@ -523,15 +523,16 @@ const svgFill=(p,w=20)=>`<svg viewBox="0 0 24 24" fill="currentColor" style="wid
 /* ============================================================
    DATA LAYER
    ============================================================ */
-let db = {leads:[],workers:[],matches:[],staff:[],templates:[]};
+let db = {leads:[],workers:[],matches:[],staff:[],templates:[],outcomes:[]};
 let saveTimer=null;
 function load(){
   try{const raw=localStorage.getItem(LS_KEY); if(raw){db=JSON.parse(raw);}}
   catch(e){console.warn("load failed",e);}
-  for(const c of ["leads","workers","matches","staff","templates"]) if(!Array.isArray(db[c])) db[c]=[];
+  for(const c of ["leads","workers","matches","staff","templates","outcomes"]) if(!Array.isArray(db[c])) db[c]=[];
   if(!db.staff.length) db.staff=[{id:"u1",name:"דביר בנגי",role:"מנהל השמה"},{id:"u2",name:"יוסי כהן",role:"רכז"},{id:"u3",name:"מרים אבוקסיס",role:"רכזת בכירה"}];
   purgeOldDeleted(); // auto-clean recycle bin after 30 days (spec א7)
   sanitizeDb(db);
+  computeLearning(); // build LEARNED weights from outcome history
 }
 function save(){ // localStorage immediate + (debounced cloud would go here)
   sanitizeDb(db);
@@ -629,24 +630,25 @@ function scoreMatch(lead, worker){
   if(lead.hasDementia==="yes" && worker.knowsDementia==="no") return null;
   // --- soft scoring ---
   let score=0; const reasons=[];
-  const add=(pts,label)=>{score+=pts;reasons.push({pts,label});};
-  if(lead.gender && worker.gender && lead.gender===worker.gender) add(30,"מין תואם");
-  if(lead.city && worker.city && (worker.city.includes(lead.city)||lead.city.includes(worker.city))) add(40,"אותו אזור/עיר");
+  const W=(typeof LEARNED!=="undefined"&&LEARNED.weights)||{}; // learned multipliers (מנוע למידה)
+  const add=(pts,label,key)=>{const p=Math.round(pts*(key&&W[key]!=null?W[key]:1));score+=p;reasons.push({pts:p,label});};
+  if(lead.gender && worker.gender && lead.gender===worker.gender) add(30,"מין תואם","sameGender");
+  if(lead.city && worker.city && (worker.city.includes(lead.city)||lead.city.includes(worker.city))) add(40,"אותו אזור/עיר","sameCity");
   if(worker.languages && lead.requirements){
     const langs=worker.languages.split(/[,،\s]+/).filter(Boolean);
-    if(langs.some(l=>lead.requirements.includes(l))) add(15,"שפה נדרשת");
+    if(langs.some(l=>lead.requirements.includes(l))) add(15,"שפה נדרשת","langMatch");
   }
   if(lead.offeredSalary && worker.expectedSalary){
     const gap=Math.abs(Number(lead.offeredSalary)-Number(worker.expectedSalary));
-    if(gap===0) add(25,"שכר זהה");
-    else if(gap<=300) add(22,"שכר קרוב מאוד");
-    else if(gap<=800) add(18,"שכר תואם");
-    else if(gap<=1500) add(5,"פער שכר סביר");
+    if(gap===0) add(25,"שכר זהה","salaryMatch");
+    else if(gap<=300) add(22,"שכר קרוב מאוד","salaryMatch");
+    else if(gap<=800) add(18,"שכר תואם","salaryMatch");
+    else if(gap<=1500) add(5,"פער שכר סביר","salaryMatch");
   }
-  if(lead.needsHoist==="yes" && worker.canHoist==="yes") add(25,"מתאים למנוף");
-  if(lead.hasDementia==="yes" && worker.knowsDementia==="yes") add(25,"ניסיון בדמנציה");
-  if(lead.needsDiapers==="yes" && worker.canDiapers==="yes") add(15,"מתאים לחיתולים");
-  if(worker.status==="זמין") add(10,"זמין/ה כעת");
+  if(lead.needsHoist==="yes" && worker.canHoist==="yes") add(25,"מתאים למנוף","hoistMatch");
+  if(lead.hasDementia==="yes" && worker.knowsDementia==="yes") add(25,"ניסיון בדמנציה","dementiaMatch");
+  if(lead.needsDiapers==="yes" && worker.canDiapers==="yes") add(15,"מתאים לחיתולים","diapersMatch");
+  if(worker.status==="זמין") add(10,"זמין/ה כעת","available");
   return {score,reasons};
 }
 function explainRejection(lead, worker){
@@ -701,6 +703,72 @@ function predictSuccess(lead){
 }
 
 /* ============================================================
+   מנוע למידה / זיכרון — learns from every placement outcome (spec ב4·ב11)
+   ============================================================ */
+const FACTOR_LABELS={sameGender:"התאמת מין",sameCity:"אותו אזור",langMatch:"התאמת שפה",salaryMatch:"התאמת שכר",
+  hoistMatch:"התאמת מנוף",dementiaMatch:"ניסיון בדמנציה",diapersMatch:"טיפול אישי",available:"זמינות"};
+let LEARNED={n:0,base:0,weights:{},insights:[],accuracy:null};
+function factorsOf(lead,worker){
+  const gap=lead.offeredSalary&&worker.expectedSalary?Math.abs(+lead.offeredSalary-+worker.expectedSalary):9999;
+  return {
+    sameGender:!!(lead.gender&&worker.gender&&lead.gender===worker.gender),
+    sameCity:!!(lead.city&&worker.city&&(worker.city.includes(lead.city)||lead.city.includes(worker.city))),
+    langMatch:!!(worker.languages&&lead.requirements&&worker.languages.split(/[,\s]+/).some(l=>l&&lead.requirements.includes(l))),
+    salaryMatch:gap<=800, hoistMatch:lead.needsHoist==="yes"&&worker.canHoist==="yes",
+    dementiaMatch:lead.hasDementia==="yes"&&worker.knowsDementia==="yes",
+    diapersMatch:lead.needsDiapers==="yes"&&worker.canDiapers==="yes", available:worker.status==="זמין",
+  };
+}
+function recordOutcome(lead,worker,result,reason){
+  db.outcomes=db.outcomes||[];
+  const m=scoreMatch(lead,worker||{});
+  db.outcomes.push({id:uid("out"),leadId:lead.id||"",cgId:worker?worker.id:"",factors:factorsOf(lead,worker||{}),
+    score:m?m.score:0,result,reason:clean(reason||"",200),source:lead.source||"",rep:lead.assignedTo||"",at:now()});
+  if(db.outcomes.length>2000)db.outcomes=db.outcomes.slice(-2000);
+  computeLearning();
+}
+function recordOutcomeFromLead(l){
+  db.outcomes=db.outcomes||[];
+  if(db.outcomes.some(o=>o.leadId===l.id))return; // once per lead
+  const w=(l.proposedWorkerIds&&l.proposedWorkerIds.length)?workerById(l.proposedWorkerIds[0]):null;
+  if(!w)return; // need the proposed caregiver to learn feature→outcome
+  recordOutcome(l,w,l.status==="סגור-הצלחה"?"success":"fail",l.lostReason||"");
+}
+function computeLearning(){
+  const O=(db.outcomes||[]); const n=O.length;
+  const base=n?O.filter(o=>o.result==="success").length/n:0;
+  const weights={}, insights=[];
+  Object.keys(FACTOR_LABELS).forEach(k=>{
+    const wf=O.filter(o=>o.factors&&o.factors[k]), nf=O.filter(o=>!(o.factors&&o.factors[k]));
+    const sWith=wf.length?wf.filter(o=>o.result==="success").length/wf.length:base;
+    const sWo=nf.length?nf.filter(o=>o.result==="success").length/nf.length:base;
+    const lift=sWith-sWo;
+    weights[k]=Math.max(.5,Math.min(1.7,1+lift*1.6)); // learned multiplier for scoreMatch
+    if(wf.length>=3)insights.push({k,label:FACTOR_LABELS[k],sWith,sWo,lift,weight:weights[k],cnt:wf.length});
+  });
+  insights.sort((a,b)=>b.lift-a.lift);
+  let accuracy=null;
+  if(n>=8){const s=O.slice().sort((a,b)=>b.score-a.score);const top=s.slice(0,Math.ceil(n/2));
+    accuracy=Math.round(top.filter(o=>o.result==="success").length/top.length*100);}
+  LEARNED={n,base,weights,insights,accuracy};
+  return LEARNED;
+}
+function seedLearningHistory(){
+  db.outcomes=[]; const R=Math.random;
+  for(let i=0;i<28;i++){
+    const f={sameGender:R()<.6,sameCity:R()<.5,langMatch:R()<.5,salaryMatch:R()<.55,
+      hoistMatch:R()<.3,dementiaMatch:R()<.3,diapersMatch:R()<.35,available:R()<.8};
+    const p=.26+(f.salaryMatch?.34:0)+(f.sameCity?.22:0)+(f.available?.12:0)+(f.dementiaMatch?.06:0)+(f.sameGender?.03:0);
+    const result=R()<Math.min(.95,p)?"success":"fail";
+    let score=0;const A={sameGender:30,sameCity:40,langMatch:15,salaryMatch:20,hoistMatch:25,dementiaMatch:25,diapersMatch:15,available:10};
+    Object.keys(A).forEach(k=>{if(f[k])score+=A[k];});
+    db.outcomes.push({id:uid("out"),leadId:"",cgId:"",factors:f,score,result,reason:"",
+      source:["המלצה","פייסבוק","גוגל"][i%3],rep:db.staff[i%db.staff.length].name,at:now()-i*3*864e5});
+  }
+  computeLearning(); save(); toast("נטענה היסטוריית למידה לדוגמה","ok"); render();
+}
+
+/* ============================================================
    UI STATE + ROUTER
    ============================================================ */
 let state={tab:"dash",leadView:"kanban",leadFilter:{status:"",rep:"",q:""},workerFilter:{status:"",q:""},matchLead:null};
@@ -710,6 +778,7 @@ const TABS=[
   {id:"workers",label:"עובדים",icon:I.workers,title:"עובדים — מטפלים",sub:"מאגר המטפלים"},
   {id:"match",label:"התאמה",icon:I.match,title:"מנוע ההתאמה",sub:"scoreMatch · דירוג מועמדים"},
   {id:"interviews",label:"ראיונות",icon:I.chat,title:"ראיונות AI",sub:"קישור ראיון אוטומטי"},
+  {id:"learning",label:"למידה",icon:I.brain,title:"מנוע הלמידה · זיכרון",sub:"לומד מכל השמה · משפר התאמות"},
   {id:"reports",label:"דוחות",icon:I.report,title:"דוחות וניתוח",sub:"ביצועים · שכר · זמינות"},
   {id:"settings",label:"הגדרות",icon:I.gear,title:"הגדרות",sub:"אבטחה · גיבוי · חיבורים"},
 ];
@@ -730,7 +799,7 @@ function go(tab){ state.tab=tab; const t=TABS.find(x=>x.id===tab);
 function render(){
   const v=$("#view");
   ({dash:renderDash,leads:renderLeads,workers:renderWorkers,match:renderMatch,
-    interviews:renderInterviews,reports:renderReports,settings:renderSettings}[state.tab]||renderDash)(v);
+    interviews:renderInterviews,learning:renderLearning,reports:renderReports,settings:renderSettings}[state.tab]||renderDash)(v);
 }
 
 /* ============================================================
@@ -912,6 +981,7 @@ function wireKanban(){
       const l=leadById(dragId); if(l&&l.status!==col.dataset.status){
         const from=l.status; l.status=col.dataset.status;
         logActivity(l,`סטטוס שונה: ${from} → ${l.status}`);
+        if(l.status.startsWith("סגור"))recordOutcomeFromLead(l); // feed the learning engine
         stamp(l); save(); renderLeadsBody(); renderNav();
         toast(`עודכן ל"${l.status}"`,"ok");
       }};
@@ -945,7 +1015,8 @@ function openLead(id){
     onMount
   });
   function onMount(){
-    const s=$("#saveLead"); if(s) s.onclick=()=>{ collectLead(l); if(isNew){db.leads.push(l);} stamp(l); save();
+    const s=$("#saveLead"); if(s) s.onclick=()=>{ collectLead(l); if(isNew){db.leads.push(l);} stamp(l);
+      if(l.status.startsWith("סגור"))recordOutcomeFromLead(l); save();
       closeModal(); toast(isNew?"הליד נוצר":"נשמר בהצלחה","ok"); renderNav(); render(); };
     // star toggle inside form
   }
@@ -1339,6 +1410,91 @@ function drawQR(box,text){
   }
   finder(0,0);finder(n-7,0);finder(0,n-7);
   box.innerHTML=`<svg viewBox="0 0 ${n} ${n}" fill="var(--sea-950)" shape-rendering="crispEdges">${cells}</svg>`;
+}
+
+/* ============================================================
+   LEARNING / MEMORY
+   ============================================================ */
+function renderLearning(v){
+  const L=computeLearning();
+  const kpi=(ic,color,n,l)=>`<div class="kpi"><div class="ic" style="background:${color}22;color:${color}">${svg(ic,20)}</div>
+    <div class="n num">${n}</div><div class="l">${l}</div></div>`;
+  if(L.n<3){
+    v.innerHTML=`<div style="max-width:680px">
+      <div class="panel"><div class="hd">${svg(I.brain,18)}<h3>מנוע הלמידה · זיכרון עוגן</h3></div>
+      <div class="bd" style="padding:22px">
+        <p style="color:var(--ink-2);font-size:14.5px;line-height:1.75;margin-bottom:16px">
+          כל השמה שנסגרת (הצלחה/כישלון) נשמרת כ<b>זיכרון</b>. המערכת לומדת <b>אילו גורמים</b> באמת מנבאים הצלחה —
+          ומכיילת אוטומטית את משקלי מנוע ההתאמה ואת החיזוי. ככל שיש יותר השמות, ההתאמות נעשות חכמות יותר.
+          <br>העיקרון: <b>הדאטה היא הנכס.</b></p>
+        <div style="padding:13px 15px;background:var(--mist);border-radius:12px;font-size:13.5px;color:var(--ink-2);margin-bottom:18px">
+          עדיין אין מספיק היסטוריה ללמידה (${L.n} רשומות). סגרו לידים עם מטפל שהוצע — או טענו היסטוריה לדוגמה כדי לראות את המנוע בפעולה.
+        </div>
+        <button class="btn primary" onclick="seedLearningHistory()">${svg(I.brain,16)}טען היסטוריית למידה לדוגמה</button>
+      </div></div></div>`;
+    return;
+  }
+  const maxLift=Math.max(0.01,...L.insights.map(i=>Math.abs(i.lift)));
+  v.innerHTML=`<div class="view-inner">
+    <div class="kpis" style="grid-template-columns:repeat(3,1fr)">
+      ${kpi(I.brain,"#2E8CA0",L.n,"השמות בזיכרון")}
+      ${kpi(I.check,"#10916E",Math.round(L.base*100)+"%","שיעור הצלחה כללי")}
+      ${kpi(I.report,"#E0913A",(L.accuracy!=null?L.accuracy+"%":"—"),"דיוק החיזוי (בק-טסט)")}
+    </div>
+    <div class="dash-grid">
+      <div class="panel">
+        <div class="hd">${svg(I.brain,18)}<h3>מה המערכת למדה</h3></div>
+        <div class="bd" style="padding:14px 18px">
+          <p style="font-size:12.5px;color:var(--ink-3);margin-bottom:14px">לכל גורם — שיעור ההצלחה כשהוא קיים מול כשאינו, וההשפעה שנלמדה.</p>
+          ${L.insights.map(i=>{
+            const pos=i.lift>=0; const c=pos?"var(--ok)":"var(--danger)";
+            return `<div style="margin-bottom:15px">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                <b style="font-size:14px;color:var(--sea-950)">${esc(i.label)}</b>
+                <span style="margin-inline-start:auto;font-weight:800;color:${c};font-size:13px">${pos?"+":""}${Math.round(i.lift*100)}%</span>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;font-size:11.5px;color:var(--ink-3)">
+                <span style="min-width:38px">כשקיים</span>
+                <div class="bar" style="flex:1"><i style="width:${Math.round(i.sWith*100)}%;background:var(--ok)"></i></div>
+                <b class="num" style="min-width:34px;text-align:end;color:var(--ok)">${Math.round(i.sWith*100)}%</b>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;font-size:11.5px;color:var(--ink-3);margin-top:4px">
+                <span style="min-width:38px">כשאין</span>
+                <div class="bar" style="flex:1"><i style="width:${Math.round(i.sWo*100)}%;background:var(--ink-3)"></i></div>
+                <b class="num" style="min-width:34px;text-align:end">${Math.round(i.sWo*100)}%</b>
+              </div>
+            </div>`;}).join("")}
+        </div>
+      </div>
+      <div class="panel">
+        <div class="hd">${svg(I.match,18)}<h3>משקלים מכוילים</h3></div>
+        <div class="bd" style="padding:16px 18px">
+          <p style="font-size:12.5px;color:var(--ink-3);margin-bottom:14px">מנוע ההתאמה משתמש עכשיו במשקלים שנלמדו מהנתונים (1.0 = בסיס).</p>
+          ${L.insights.map(i=>{const w=i.weight;const pct=(w/1.7)*100;
+            return `<div style="display:flex;align-items:center;gap:11px;margin-bottom:10px">
+              <span style="min-width:88px;font-size:12.5px;font-weight:700;color:var(--sea-950)">${esc(i.label)}</span>
+              <div class="bar" style="flex:1"><i style="width:${pct}%;background:${w>=1?'linear-gradient(90deg,var(--sea-500),var(--anchor))':'var(--warn)'}"></i></div>
+              <b class="num" style="min-width:36px;text-align:end;color:${w>=1?'var(--anchor)':'var(--warn)'}">×${w.toFixed(2)}</b>
+            </div>`;}).join("")}
+          <div style="margin-top:16px;padding:12px;background:var(--ok-soft);border-radius:10px;font-size:12.5px;color:#0c7a6d;line-height:1.6">
+            💡 ${L.insights[0]?`הגורם המשפיע ביותר כרגע: <b>${esc(L.insights[0].label)}</b> (${L.insights[0].lift>=0?"+":""}${Math.round(L.insights[0].lift*100)}%). המנוע נותן לו משקל גבוה יותר בהתאמות.`:"אוסף עוד נתונים."}
+          </div>
+          <button class="btn sm" style="margin-top:14px" onclick="if(confirm('לאפס את זיכרון הלמידה?')){db.outcomes=[];computeLearning();save();render();}">אפס זיכרון</button>
+          <button class="btn sm" style="margin-top:14px" onclick="seedLearningHistory()">טען עוד דמו</button>
+        </div>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:16px">
+      <div class="hd">${svg(I.clock,18)}<h3>השמות אחרונות בזיכרון</h3></div>
+      <div class="bd" style="padding:6px 12px 12px">
+        <table class="tbl"><thead><tr><th>תוצאה</th><th>ניקוד</th><th>מקור</th><th>נציג</th><th>מתי</th></tr></thead><tbody>
+        ${(db.outcomes||[]).slice().sort((a,b)=>b.at-a.at).slice(0,10).map(o=>`<tr>
+          <td><span class="st ${o.result==="success"?"s-won":"s-lost"}"><span class="dot"></span>${o.result==="success"?"הצלחה":"כישלון"}</span></td>
+          <td class="num">${o.score}</td><td>${esc(o.source||"—")}</td><td>${esc(o.rep||"—")}</td><td>${fmtDate(o.at)}</td></tr>`).join("")}
+        </tbody></table>
+      </div>
+    </div>
+  </div>`;
 }
 
 /* ============================================================
