@@ -844,11 +844,6 @@ function renderChatThread(w){
       ${c?`<a class="wa" href="${jitsiLink(c._id)}" target="_blank" title="שיחת וידאו" style="color:var(--anchor)">${svg(I.video,20)}</a>`:""}
       ${phone?`<a class="wa" href="${waLink(phone)}" target="_blank" title="פתח בוואטסאפ">${svgF(I.wa,22)}</a>`:""}
     </div>
-    ${c&&!c.placed?`<div style="padding:9px 14px;background:var(--mist);text-align:center"><button style="font-size:12px;font-weight:700;color:var(--anchor)" onclick="markPlaced('${c._id}')">✓ סמנו שההשמה הושלמה</button></div>`:""}
-    ${c&&c.placed&&!c.famRating?`<div style="padding:12px 14px;background:var(--like-soft)">
-      <div style="font-size:13px;font-weight:700;color:var(--like);margin-bottom:8px">איך היה עם ${esc(w.name)}? דרגו:</div>
-      <div id="ratingStars" style="display:flex;gap:6px;justify-content:center">${[1,2,3,4,5].map(n=>`<button onclick="submitRating('${c._id}',${n})" style="font-size:26px;opacity:.35">★</button>`).join("")}</div>
-    </div>`:""}
     <div class="ct-body" id="ctBody">
       ${msgs.length?msgs.map(m=>bubble(m)).join(""):`<div class="wa-note">זו תחילת השיחה עם ${esc(w.name)}. אפשר גם לפתוח וואטסאפ בכפתור שלמעלה.</div>`}
     </div>
@@ -865,19 +860,6 @@ function bubble(m){
   return `<div class="bub ${mine?"me":"them"}">${esc(primary)}
     ${secondary?`<div style="opacity:.7;font-size:11.5px;margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,.2)">🌐 ${esc(secondary)}</div>`:""}
     <time>${timeStr(m.at)}</time></div>`;
-}
-function markPlaced(connId){
-  if(!connCol())return;
-  if(!confirm("לסמן שההשמה עם המטפל/ת הושלמה? זה יפתח דירוג קצר לשני הצדדים."))return;
-  connCol().doc(connId).set({placed:true,placedAt:now()},{merge:true}).catch(e=>console.warn(e));
-  toast("סומן ✓");
-}
-function submitRating(connId,stars){
-  if(!connCol())return;
-  $$("#ratingStars button").forEach((b,i)=>b.style.opacity=i<stars?1:.35);
-  connCol().doc(connId).set({famRating:stars,famRatingAt:now()},{merge:true})
-    .then(()=>{toast("תודה על הדירוג! ⭐");})
-    .catch(e=>console.warn(e));
 }
 function guessNonHebrewLang(w){
   const langs=(w&&w.languages||"").split(/[,،]+/).map(s=>s.trim()).filter(Boolean);

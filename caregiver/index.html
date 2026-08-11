@@ -274,25 +274,7 @@ function subscribeConns(){
     conns=snap.docs.map(d=>Object.assign({_id:d.id},d.data()));
     if($("#main").classList.contains("on"))switchTab(curTab);
     if($("#chat").classList.contains("on")&&chatConn){const c=conns.find(x=>x._id===chatConn._id);if(c){chatConn=c;renderChat(c);}}
-    recomputeRating();
   },e=>console.warn("conn sub",e));
-}
-function recomputeRating(){
-  const rated=conns.filter(c=>typeof c.famRating==="number");
-  if(!rated.length)return;
-  const avg=rated.reduce((s,c)=>s+c.famRating,0)/rated.length;
-  const r=Math.round(avg*10)/10;
-  if(me.rating!==r){me.rating=r;saveMe();}
-}
-function markPlaced(connId){
-  if(!confirm("לסמן שההשמה עם המשפחה הושלמה? זה יפתח דירוג קצר לשני הצדדים."))return;
-  connCol().doc(connId).set({placed:true,placedAt:nowT()},{merge:true}).catch(e=>console.warn(e));
-  toast("סומן ✓");
-}
-function submitRating(connId,stars){
-  $$("#ratingStars button").forEach((b,i)=>b.style.opacity=i<stars?1:.35);
-  connCol().doc(connId).set({cgRating:stars,cgRatingAt:nowT()},{merge:true})
-    .then(()=>toast("תודה על הדירוג! ⭐")).catch(e=>console.warn(e));
 }
 
 /* ---------- PROFILE + MEDIA ---------- */
@@ -527,11 +509,6 @@ function renderChat(c){const f=c.fam||{};const msgs=c.msgs||[];
       <div class="av" style="width:40px;height:40px;border-radius:50%;font-size:16px">${esc((f.name||"?")[0])}</div>
       <div class="who"><b>${esc(f.name||"משפחה")}</b><span>${esc(f.city||"")}</span></div>
       <a class="wa" style="margin-inline-start:auto;color:var(--anchor)" href="${jitsiLink(c._id)}" target="_blank" title="שיחת וידאו">${svg(I.video,20)}</a></div>
-    ${!c.placed?`<div style="padding:9px 14px;background:var(--mist);text-align:center"><button style="font-size:12px;font-weight:700;color:var(--anchor)" onclick="markPlaced('${c._id}')">✓ סמנו שההשמה הושלמה</button></div>`:""}
-    ${c.placed&&!c.cgRating?`<div style="padding:12px 14px;background:var(--like-soft)">
-      <div style="font-size:13px;font-weight:700;color:var(--like);margin-bottom:8px">איך היה עם משפחת ${esc(f.name||"")}? דרגו:</div>
-      <div id="ratingStars" style="display:flex;gap:6px;justify-content:center">${[1,2,3,4,5].map(n=>`<button onclick="submitRating('${c._id}',${n})" style="font-size:26px;opacity:.35">★</button>`).join("")}</div>
-    </div>`:""}
     <div class="ct-body" id="ctBody">${msgs.length?msgs.map(bubble).join(""):`<div style="text-align:center;color:var(--ink-3);font-size:12px;padding:8px">תחילת השיחה עם ${esc(f.name||"המשפחה")}</div>`}</div>
     <div class="ct-foot"><input id="ctInput" placeholder="הקלד/י הודעה…" onkeydown="if(event.key==='Enter')sendMsg()"><button class="send" onclick="sendMsg()">${svg(I.send,20)}</button></div>`;
   const b=$("#ctBody");b.scrollTop=b.scrollHeight;
