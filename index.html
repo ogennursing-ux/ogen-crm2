@@ -778,6 +778,7 @@ const TABS=[
   {id:"workers",label:"עובדים",icon:I.workers,title:"עובדים — מטפלים",sub:"מאגר המטפלים"},
   {id:"match",label:"התאמה",icon:I.match,title:"מנוע ההתאמה",sub:"scoreMatch · דירוג מועמדים"},
   {id:"interviews",label:"ראיונות",icon:I.chat,title:"ראיונות AI",sub:"קישור ראיון אוטומטי"},
+  {id:"hibur",label:"חיבור בקליק",icon:I.match,title:"חיבור בקליק",sub:"משפחות ומטפלים שנרשמו באפליקציה — מערכת נפרדת מהשמה בקליק"},
   {id:"learning",label:"למידה",icon:I.brain,title:"מנוע הלמידה · זיכרון",sub:"לומד מכל השמה · משפר התאמות"},
   {id:"reports",label:"דוחות",icon:I.report,title:"דוחות וניתוח",sub:"ביצועים · שכר · זמינות"},
   {id:"settings",label:"הגדרות",icon:I.gear,title:"הגדרות",sub:"אבטחה · גיבוי · חיבורים"},
@@ -799,7 +800,7 @@ function go(tab){ state.tab=tab; const t=TABS.find(x=>x.id===tab);
 function render(){
   const v=$("#view");
   ({dash:renderDash,leads:renderLeads,workers:renderWorkers,match:renderMatch,
-    interviews:renderInterviews,learning:renderLearning,reports:renderReports,settings:renderSettings}[state.tab]||renderDash)(v);
+    interviews:renderInterviews,hibur:renderHibur,learning:renderLearning,reports:renderReports,settings:renderSettings}[state.tab]||renderDash)(v);
 }
 
 /* ============================================================
@@ -1338,7 +1339,6 @@ function proposeWorker(leadId,workerId){
    ============================================================ */
 function renderInterviews(v){
   const link=location.origin+location.pathname+"?mode=interview";
-  const familyLink=new URL("family/",location.href).href;
   const fromInterview=alive("workers").filter(w=>w.interview);
   v.innerHTML=`
   <div class="dash-grid">
@@ -1371,13 +1371,23 @@ function renderInterviews(v){
           </div>`).join(""):`<div class="empty" style="padding:30px">${svg(I.chat,40)}<h3>עדיין אין ראיונות</h3><p>שתפ/י את הקישור כדי להתחיל</p></div>`}
       </div>
     </div>
-  </div>
-  <div class="panel" style="margin-top:16px">
-    <div class="hd">${svg(I.match,18)}<h3>אפליקציית משפחה — חיבור בקליק</h3></div>
+  </div>`;
+  drawQR($("#qrBox"),link);
+}
+
+/* ============================================================
+   חיבור בקליק — טאב נפרד: מערכת התאמה עצמאית (משפחות+מטפלים),
+   לא חלק מ"השמה בקליק" (ה-CRM עצמו). כאן רק תצוגה/ניהול-קל.
+   ============================================================ */
+function renderHibur(v){
+  const familyLink=new URL("family/",location.href).href;
+  v.innerHTML=`
+  <div class="panel">
+    <div class="hd">${svg(I.match,18)}<h3>קישור למשפחה</h3></div>
     <div class="bd" style="padding:20px">
       <p style="color:var(--ink-2);font-size:14px;line-height:1.7;margin-bottom:18px">
         שלח/י למשפחה את הקישור ל"חיבור בקליק": הן ממלאות שאלון קצר, מחליקות בין המטפלים המתאימים
-        (בסגנון טינדר עם אחוז התאמה ונימוקים), ומסמנות מי שמעניין אותן. הבחירות חוזרות אליך כליד אוטומטי.</p>
+        (בסגנון טינדר עם אחוז התאמה ונימוקים), ומסמנות מי שמעניין אותן.</p>
       <div class="qrbox">
         <div class="qr" id="familyQr"></div>
         <div style="flex:1;min-width:200px">
@@ -1392,12 +1402,20 @@ function renderInterviews(v){
     </div>
   </div>
   <div class="panel" style="margin-top:16px">
-    <div class="hd">${svg(I.brain,18)}<h3>בריף יומי — חיבור בקליק</h3>
+    <div class="hd">${svg(I.brain,18)}<h3>בריף יומי</h3>
       <button class="btn sm ghost" style="margin-inline-start:auto" onclick="loadHiburDigest()">${svg(I.chat,14)}רענן</button></div>
     <div class="bd" style="padding:20px" id="hiburDigest">
       <div class="empty" style="padding:20px">${svg(I.brain,36)}<h3>טוען נתונים…</h3></div>
     </div>
   </div>
+  <div class="toolbar" style="margin-top:20px">
+    <div class="seg">
+      <button class="${state.hiburView!=='cg'?'on':''}" data-hv="fam">משפחות</button>
+      <button class="${state.hiburView==='cg'?'on':''}" data-hv="cg">מטפלים</button>
+    </div>
+    <input class="filter" id="hiburSearch" placeholder="חיפוש לפי שם/עיר/טלפון…" style="flex:1;min-width:180px;height:38px;border-radius:10px;border:1px solid var(--line);padding:0 12px">
+  </div>
+  <div class="panel" id="hiburList"><div class="empty" style="padding:20px">${svg(I.workers,36)}<h3>טוען…</h3></div></div>
   <div class="panel" style="margin-top:16px">
     <div class="hd">${svg(I.pin,18)}<h3>אישור התאמות</h3></div>
     <div class="bd" style="padding:20px">
@@ -1417,12 +1435,47 @@ function renderInterviews(v){
     <div class="hd">${svg(I.chat,18)}<h3>שיחות פעילות</h3></div>
     <div class="bd" style="padding:12px" id="hiburChats"><div class="empty" style="padding:16px">${svg(I.chat,32)}<h3>טוען…</h3></div></div>
   </div>`;
-  drawQR($("#qrBox"),link);
   drawQR($("#familyQr"),familyLink);
   loadHiburDigest();
   loadApprovalQueue();
   loadDuplicateCheck();
   loadHiburChats();
+  loadHiburList();
+  $$("[data-hv]").forEach(b=>b.onclick=()=>{state.hiburView=b.dataset.hv;
+    $$("[data-hv]").forEach(x=>x.classList.toggle("on",x===b)); renderHiburListBody();});
+  $("#hiburSearch").oninput=e=>{state.hiburSearch=e.target.value;renderHiburListBody();};
+}
+
+/* ---------- families/caregivers browsable list ---------- */
+let hiburFamCache=[], hiburCgCache=[];
+async function loadHiburList(){
+  const fdb2=initHiburRead(); if(!fdb2)return;
+  try{
+    const [famSnap,cgSnap]=await Promise.all([fdb2.collection("hibur").get(),fdb2.collection("hibur_cg").get()]);
+    hiburFamCache=famSnap.docs.map(d=>Object.assign({_id:d.id},d.data()));
+    hiburCgCache=cgSnap.docs.map(d=>Object.assign({_id:d.id},d.data()));
+    renderHiburListBody();
+  }catch(e){console.warn("hibur list",e);}
+}
+function renderHiburListBody(){
+  const box=$("#hiburList"); if(!box)return;
+  const view=state.hiburView||"fam";
+  const q=(state.hiburSearch||"").trim();
+  let rows=view==="fam"?hiburFamCache:hiburCgCache;
+  if(q)rows=rows.filter(r=>[r.name,r.city,r.phone].join(" ").includes(q));
+  if(!rows.length){box.innerHTML=`<div class="empty" style="padding:24px">${svg(I.workers,36)}<h3>${view==="fam"?"אין משפחות רשומות":"אין מטפלים רשומים"}</h3></div>`;return;}
+  box.innerHTML=`<table class="tbl"><thead><tr>
+      <th>שם</th><th>עיר</th><th>טלפון</th>${view==="cg"?"<th>לאום</th><th>ניסיון</th><th>סטטוס</th>":"<th>תקציב</th><th>נרשמ/ה</th>"}
+    </tr></thead><tbody>
+    ${rows.map(r=>view==="fam"?`<tr>
+        <td><b>${esc(r.name||"—")}</b></td><td>${esc(r.city||"—")}</td><td dir="ltr" style="text-align:right">${esc(r.phone||"—")}</td>
+        <td>${money((r.family&&r.family.offeredSalary)||0)}</td><td>${fmtDate(r.createdAt?new Date(r.createdAt).toISOString():"")}</td>
+      </tr>`:`<tr>
+        <td><b>${esc(r.name||"—")}</b></td><td>${esc(r.city||"—")}</td><td dir="ltr" style="text-align:right">${esc(r.phone||"—")}</td>
+        <td>${esc(r.nationality||"—")}</td><td>${esc(r.experience||"—")}</td>
+        <td><span class="st ${r.status==="זמין"?"w-avail":"w-proc"}"><span class="dot"></span>${esc(r.status||"—")}</span></td>
+      </tr>`).join("")}
+  </tbody></table>`;
 }
 
 /* ---------- חיבור בקליק daily digest for coordinator ---------- */
@@ -1920,6 +1973,12 @@ function smartSearchWorkers(ws,q){
 function exportJSON(){
   const blob=new Blob([JSON.stringify(db,null,2)],{type:"application/json"});
   dl(blob,`ogen-crm-גיבוי-${new Date().toISOString().slice(0,10)}.json`); toast("גיבוי יוצא","ok");
+  localStorage.setItem("ogenLastBackup",String(Date.now()));
+}
+function checkBackupReminder(){ // spec א7: weekly backup reminder
+  const last=+(localStorage.getItem("ogenLastBackup")||0);
+  const days=last?Math.floor((Date.now()-last)/864e5):999;
+  if(days>=7) setTimeout(()=>toast(last?`עברו ${days} ימים מהגיבוי האחרון — מומלץ לייצא גיבוי (הגדרות)`:"טרם בוצע גיבוי — מומלץ לייצא אחד (הגדרות)","err"),1200);
 }
 function importJSON(e){
   const f=e.target.files[0];if(!f)return;const r=new FileReader();
@@ -2340,6 +2399,7 @@ function boot(){
   if(su&&$("#whoRole"))$("#whoRole").textContent=su.role||"מנהל השמה";
   renderNav(); go("dash");
   setSyncStatus(syncEnabled()?"connecting":"local"); initFirebase();
+  checkBackupReminder();
   $("#globalSearch").oninput=e=>{
     const q=e.target.value;
     if(state.tab==="workers"){state.workerFilter.q=q;renderWorkersBody?.();}
