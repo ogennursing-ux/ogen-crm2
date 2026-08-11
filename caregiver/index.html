@@ -181,6 +181,14 @@ function uploadToCloudinary(fileOrBlob,{onProgress}={}){
 const connCol=()=>fdb.collection("hibur_conn");
 const AU=x=>firebase.firestore.FieldValue.arrayUnion(x);
 
+/* ---------- WhatsApp bridge (Netlify Functions backend; no-op until Meta credentials are set there) ---------- */
+const WA_BRIDGE_URL="https://hibur-wa-bridge.netlify.app/.netlify/functions";
+function bridgeToWhatsapp(phone,text){
+  if(!phone||!text)return;
+  fetch(WA_BRIDGE_URL+"/wa-send",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({toPhone:phone,text})}).catch(()=>{});
+}
+
 /* ---------- Gemini AI (shared key with family app, same origin) ---------- */
 const AI_MODEL="gemini-flash-latest";
 const getAIKey=()=>(localStorage.getItem("hbGeminiKey")||"").trim();
@@ -542,6 +550,7 @@ async function sendMsg(){const inp=$("#ctInput");const t=inp.value.trim();if(!t|
   if(tr){msg.translated=tr;msg.translatedLang="עברית";}
   connCol().doc(chatConn._id).set({msgs:AU(msg),updatedAt:nowT()},{merge:true}).catch(e=>console.warn(e));
   chatConn.msgs=(chatConn.msgs||[]).concat(msg);renderChat(chatConn);
+  const waPhone=chatConn.fam&&chatConn.fam.phone; if(waPhone)bridgeToWhatsapp(waPhone,msg.translated||t);
 }
 
 /* ---------- boot ---------- */

@@ -650,6 +650,14 @@ function subscribeFamConns(){
   },e=>console.warn("famconn",e));
 }
 
+/* ---------- WhatsApp bridge (Netlify Functions backend; no-op until Meta credentials are set there) ---------- */
+const WA_BRIDGE_URL="https://hibur-wa-bridge.netlify.app/.netlify/functions";
+function bridgeToWhatsapp(phone,text){
+  if(!phone||!text)return;
+  fetch(WA_BRIDGE_URL+"/wa-send",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({toPhone:phone,text})}).catch(()=>{}); // best-effort, never blocks the in-app chat
+}
+
 /* ---------- Gemini AI (shared key across family+caregiver apps, same origin) ---------- */
 const AI_MODEL="gemini-flash-latest";
 const getAIKey=()=>(localStorage.getItem("hbGeminiKey")||"").trim();
@@ -684,7 +692,7 @@ async function explainMatchAI(lead,reasons){
 function familyLike(w){
   if(!connCol())return;
   connCol().doc(me.id+"__"+w.id).set({famId:me.id,cgId:w.id,
-    fam:{name:me.name,city:me.city,gender:me.family.gender,budget:me.family.offeredSalary,
+    fam:{name:me.name,city:me.city,phone:me.phone||"",gender:me.family.gender,budget:me.family.offeredSalary,
       needHoist:me.family.needsHoist,needDementia:me.family.hasDementia,needDiapers:me.family.needsDiapers,req:me.family.requirements},
     cg:{name:w.name,lastName:w.lastName||"",city:w.city||"",nationality:w.nationality||"",photo:w.photo||"",age:w.age||"",phone:w.phone||""},
     famLiked:true,updatedAt:now()},{merge:true}).catch(e=>console.warn("like",e));
@@ -888,6 +896,7 @@ async function sendMsg(){
   connCol().doc(c._id).set({msgs:AU(msg),updatedAt:now()},{merge:true}).catch(e=>console.warn(e));
   c.msgs=(c.msgs||[]).concat(msg); readAt[c._id]=now();
   renderChatThread(w);
+  const waPhone=(c.cg&&c.cg.phone)||w.phone; if(waPhone)bridgeToWhatsapp(waPhone,msg.translated||t);
 }
 
 /* ---------- PROFILE (self) ---------- */
