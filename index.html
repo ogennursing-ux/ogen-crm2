@@ -437,7 +437,7 @@ table.tbl tr:hover td{background:var(--mist)}
 <div id="interview">
   <div class="iv-head">
     <div class="ava">י</div>
-    <div class="info"><b>יעל · עוגן סיעוד</b><span id="ivStatus">מקוונת</span></div>
+    <div class="info"><b>מאור · עוגן סיעוד</b><span id="ivStatus">מקוונת</span></div>
   </div>
   <div class="iv-body" id="ivBody"></div>
   <div class="iv-foot" id="ivFoot" style="display:none">
@@ -529,7 +529,7 @@ function load(){
   try{const raw=localStorage.getItem(LS_KEY); if(raw){db=JSON.parse(raw);}}
   catch(e){console.warn("load failed",e);}
   for(const c of ["leads","workers","matches","staff","templates","outcomes"]) if(!Array.isArray(db[c])) db[c]=[];
-  if(!db.staff.length) db.staff=[{id:"u1",name:"דביר בנגי",role:"מנהל השמה"},{id:"u2",name:"יוסי כהן",role:"רכז"},{id:"u3",name:"מרים אבוקסיס",role:"רכזת בכירה"}];
+  if(!db.staff.length) db.staff=[{id:"u1",name:"דביר בנגי",role:"מנהל השמה",code:"2002דביר"},{id:"u4",name:"ניריה ביתן",role:"מנהל השמה",code:"2002ניריה"},{id:"u5",name:"יעל ביתן",role:"מנהל השמה",code:"2002יעל"},{id:"u6",name:"יהודה ארדוט",role:"מנהל השמה",code:"2002יהודה"},{id:"u2",name:"יוסי כהן",role:"רכז"},{id:"u3",name:"מרים אבוקסיס",role:"רכזת בכירה"}];
   purgeOldDeleted(); // auto-clean recycle bin after 30 days (spec א7)
   sanitizeDb(db);
   computeLearning(); // build LEARNED weights from outcome history
@@ -1188,7 +1188,7 @@ function openWorker(id){
       <div style="padding:2px">
         <div class="chip" style="margin-bottom:12px">${svg(I.chat,13)} ראיון ${w.interview.language||""} · ${w.interview.completedAt?"הושלם "+fmtDate(w.interview.completedAt):"חלקי"}</div>
         <div style="background:var(--mist);border-radius:12px;padding:12px;max-height:360px;overflow:auto">
-          ${w.interview.messages.map(m=>`<div style="margin-bottom:8px"><b style="font-size:11px;color:var(--ink-3)">${m.role==="assistant"?"יעל":"מטפל/ת"}:</b>
+          ${w.interview.messages.map(m=>`<div style="margin-bottom:8px"><b style="font-size:11px;color:var(--ink-3)">${m.role==="assistant"?"מאור":"מטפל/ת"}:</b>
             <div style="font-size:13.5px">${esc(m.content)}</div></div>`).join("")}
         </div></div>`
       :`<div class="empty">${svg(I.chat,44)}<h3>לא נערך ראיון AI</h3><p>המטפל/ת נוצר/ה ידנית או ללא ראיון</p></div>`,()=>{});
@@ -1346,7 +1346,7 @@ function renderInterviews(v){
       <div class="hd">${svg(I.qr,18)}<h3>קישור ראיון אוטומטי</h3></div>
       <div class="bd" style="padding:20px">
         <p style="color:var(--ink-2);font-size:14px;line-height:1.7;margin-bottom:18px">
-          שלח/י את הקישור למטפל/ת בוואטסאפ. "יעל" — פרסונת ה-AI — תנהל ראיון קצר ב-9 שפות
+          שלח/י את הקישור למטפל/ת בוואטסאפ. "מאור" — פרסונת ה-AI — תנהל ראיון קצר ב-9 שפות
           ותיצור כרטיס מטפל/ת אוטומטית בסיום.</p>
         <div class="qrbox">
           <div class="qr" id="qrBox"></div>
@@ -1854,7 +1854,6 @@ function renderReports(v){
    SETTINGS
    ============================================================ */
 function renderSettings(v){
-  const pin=localStorage.getItem("ogenPIN")||"2002דביר";
   const gkey=localStorage.getItem("geminiApiKey")||"";
   const gkey2=localStorage.getItem("geminiApiKey2")||"";
   const syncedOn=syncEnabled();
@@ -1864,9 +1863,7 @@ function renderSettings(v){
     <div class="panel" style="margin-bottom:16px">
       <div class="hd">${svg(I.pin,18)}<h3>אבטחה</h3></div>
       <div class="bd" style="padding:18px">
-        <div class="field"><label>קוד גישה (אותיות/ספרות)</label>
-          <input id="setPin" value="${esc(pin)}" maxlength="40" style="max-width:260px;font-size:16px"></div>
-        <p style="font-size:12.5px;color:var(--ink-3)">נעילה אוטומטית לאחר 5 ניסיונות כושלים. הנתונים נשמרים מקומית (localStorage) + סנכרון ענן אופציונלי.</p>
+        <p style="font-size:12.5px;color:var(--ink-3)">כל מנהל/ת השמה נכנס/ת עם קוד אישי משלו/ה — ניתן לנהל את הקודים בפאנל "מנהלי השמה" למטה. נעילה אוטומטית לאחר 5 ניסיונות כושלים. הנתונים נשמרים מקומית (localStorage) + סנכרון ענן אופציונלי.</p>
       </div>
     </div>
     <div class="panel" style="margin-bottom:16px">
@@ -1878,12 +1875,14 @@ function renderSettings(v){
           ${db.staff.map(u=>`<div class="urg" style="cursor:default">
             <div class="ic" style="background:${avaColor(u.name)}22;color:${avaColor(u.name)}">${esc(u.name[0]||"?")}</div>
             <div class="tx"><b>${esc(u.name)}</b><span>${esc(u.role||"רכז/ת")}</span></div>
+            <input class="staffCodeInp" data-id="${u.id}" value="${esc(u.code||"")}" placeholder="קוד כניסה אישי" style="max-width:140px;font-size:13px">
             <button class="btn sm danger" onclick="removeStaff('${u.id}')">הסר</button>
           </div>`).join("")}
         </div>
         <div class="addact">
           <input id="newStaffName" placeholder="שם מנהל/ת השמה">
           <input id="newStaffRole" placeholder="תפקיד" style="max-width:130px">
+          <input id="newStaffCode" placeholder="קוד כניסה אישי" style="max-width:140px">
           <button class="btn primary" onclick="addStaff()">${svg(I.plus,15)}הוסף</button>
         </div>
       </div>
@@ -1948,8 +1947,15 @@ function renderSettings(v){
       </div>
     </div>
   </div>`;
-  $("#setPin").onchange=e=>{const p=e.target.value.trim().slice(0,40);if(p.length>=4){localStorage.setItem("ogenPIN",p);toast("קוד עודכן","ok");}else toast("נדרשים לפחות 4 תווים","err");};
   $("#setMe").onchange=e=>{localStorage.setItem("ogenUser",e.target.value);$("#whoName").textContent=e.target.value;$("#whoAva").textContent=e.target.value[0]||"?";const su=db.staff.find(s=>s.name===e.target.value);if(su&&$("#whoRole"))$("#whoRole").textContent=su.role||"מנהל השמה";toast("מחובר/ת כ-"+e.target.value,"ok");};
+  document.querySelectorAll(".staffCodeInp").forEach(inp=>{
+    inp.onchange=e=>{
+      const id=e.target.dataset.id, val=clean(e.target.value,40);
+      const su=db.staff.find(s=>s.id===id);
+      if(val&&db.staff.some(s=>s.id!==id&&s.code===val)){toast("קוד כבר בשימוש","err"); e.target.value=(su&&su.code)||""; return;}
+      if(su){su.code=val||undefined; save(); toast("קוד עודכן: "+su.name,"ok");}
+    };
+  });
   $("#setGemini").onchange=e=>{localStorage.setItem("geminiApiKey",e.target.value.trim());toast("מפתח ראשי נשמר","ok");};
   $("#setGemini2").onchange=e=>{localStorage.setItem("geminiApiKey2",e.target.value.trim());toast("מפתח גיבוי נשמר","ok");};
   $("#setSync").onchange=e=>{toggleSync(e.target.checked);toast(e.target.checked?"סנכרון הופעל":"סנכרון כובה","ok");};
@@ -2062,9 +2068,11 @@ function wipeAll(){if(confirm("לאפס את כל הנתונים? פעולה ב�
 function reseed(){db={leads:[],workers:[],matches:[],staff:[],templates:[]};load();seed();toast("נתוני דמו נטענו","ok");render();renderNav();}
 function addStaff(){
   const name=clean($("#newStaffName").value,60), role=clean($("#newStaffRole").value,40)||"רכז/ת";
+  const code=clean($("#newStaffCode").value,40);
   if(!name){toast("הזן/י שם","err");return;}
   if(db.staff.some(s=>s.name===name)){toast("שם כבר קיים","err");return;}
-  db.staff.push({id:uid("u"),name,role}); save(); toast("נוסף: "+name,"ok"); render();
+  if(code&&db.staff.some(s=>s.code===code)){toast("קוד כבר בשימוש","err");return;}
+  db.staff.push({id:uid("u"),name,role,code:code||undefined}); save(); toast("נוסף: "+name,"ok"); render();
 }
 function removeStaff(id){
   if(db.staff.length<=1){toast("חייב להישאר מנהל אחד לפחות","err");return;}
@@ -2106,23 +2114,23 @@ function toast(msg,type="ok"){
    INTERVIEW ENGINE (?mode=interview)  — spec א6
    ============================================================ */
 const IV_LANGS={ // 9 languages per spec (א6)
-  "עברית":{code:"he",greet:"שלום! אני יעל מחברת עוגן 😊 אני אשאל אותך כמה שאלות קצרות כדי להכיר אותך. מה שמך המלא?",
+  "עברית":{code:"he",greet:"שלום! אני מאור מחבר עוגן 😊 אני אשאל אותך כמה שאלות קצרות כדי להכיר אותך. מה שמך המלא?",
     thanks:"תודה רבה!",done:"מעולה, סיימנו! 🎉 הפרטים שלך נשמרו ורכז/ת שלנו יחזור/תחזור אליך בקרוב. יום נעים!"},
-  "English":{code:"en",greet:"Hello! I'm Yael from Ogen 😊 I'll ask you a few short questions. What is your full name?",
+  "English":{code:"en",greet:"Hello! I'm Maor from Ogen 😊 I'll ask you a few short questions. What is your full name?",
     thanks:"Thank you!",done:"Great, we're done! 🎉 Your details were saved and our coordinator will contact you soon."},
-  "Oʻzbekcha":{code:"uz",greet:"Salom! Men Ogendan Yaelman 😊 Sizga bir nechta qisqa savol beraman. Toʻliq ismingiz nima?",
+  "Oʻzbekcha":{code:"uz",greet:"Salom! Men Ogendan Maorman 😊 Sizga bir nechta qisqa savol beraman. Toʻliq ismingiz nima?",
     thanks:"Katta rahmat!",done:"Ajoyib, tugatdik! 🎉 Maʼlumotlaringiz saqlandi, muvofiqlashtiruvchimiz tez orada siz bilan bogʻlanadi."},
-  "Русский":{code:"ru",greet:"Здравствуйте! Я Яэль из Оген 😊 Я задам несколько коротких вопросов. Как вас зовут?",
+  "Русский":{code:"ru",greet:"Здравствуйте! Я Маор из Оген 😊 Я задам несколько коротких вопросов. Как вас зовут?",
     thanks:"Спасибо!",done:"Отлично, готово! 🎉 Ваши данные сохранены, координатор скоро свяжется с вами."},
-  "Română":{code:"ro",greet:"Bună! Sunt Yael de la Ogen 😊 O să vă pun câteva întrebări scurte. Care este numele dvs. complet?",
+  "Română":{code:"ro",greet:"Bună! Sunt Maor de la Ogen 😊 O să vă pun câteva întrebări scurte. Care este numele dvs. complet?",
     thanks:"Mulțumesc mult!",done:"Excelent, am terminat! 🎉 Datele dvs. au fost salvate și coordonatorul nostru vă va contacta în curând."},
-  "Tagalog":{code:"tl",greet:"Kumusta! Ako si Yael from Ogen 😊 May ilang tanong lang ako. Ano ang buong pangalan mo?",
+  "Tagalog":{code:"tl",greet:"Kumusta! Ako si Maor from Ogen 😊 May ilang tanong lang ako. Ano ang buong pangalan mo?",
     thanks:"Salamat!",done:"Great, tapos na tayo! 🎉 Na-save na ang details mo. Magco-contact ang coordinator namin."},
-  "Español":{code:"es",greet:"¡Hola! Soy Yael de Ogen 😊 Te haré algunas preguntas breves. ¿Cuál es tu nombre completo?",
+  "Español":{code:"es",greet:"¡Hola! Soy Maor de Ogen 😊 Te haré algunas preguntas breves. ¿Cuál es tu nombre completo?",
     thanks:"¡Muchas gracias!",done:"¡Genial, terminamos! 🎉 Tus datos fueron guardados y nuestro coordinador se pondrá en contacto pronto."},
-  "فارسی":{code:"fa",greet:"سلام! من یائل از عوگن هستم 😊 چند سؤال کوتاه می‌پرسم. نام کامل شما چیست؟",
+  "فارسی":{code:"fa",greet:"سلام! من ماور از عوگن هستم 😊 چند سؤال کوتاه می‌پرسم. نام کامل شما چیست؟",
     thanks:"خیلی متشکرم!",done:"عالی، تمام شد! 🎉 اطلاعات شما ذخیره شد و هماهنگ‌کننده ما به‌زودی با شما تماس می‌گیرد."},
-  "አማርኛ":{code:"am",greet:"ሰላም! እኔ ከኦገን ያዔል ነኝ 😊 ጥቂት አጭር ጥያቄዎችን እጠይቅዎታለሁ። ሙሉ ስምዎ ማን ነው?",
+  "አማርኛ":{code:"am",greet:"ሰላም! እኔ ከኦገን ማኦር ነኝ 😊 ጥቂት አጭር ጥያቄዎችን እጠይቅዎታለሁ። ሙሉ ስምዎ ማን ነው?",
     thanks:"በጣም አመሰግናለሁ!",done:"በጣም ጥሩ፣ ጨርሰናል! 🎉 መረጃዎ ተቀምጧል እናም አስተባባሪያችን በቅርቡ ያገኝዎታል።"},
 };
 const IV_QUESTIONS=[ // 11 info points (spec), translated into all 9 languages
@@ -2238,7 +2246,7 @@ function buildWorkerFromInterview(partial){ // sanitize AI/user output (spec)
     canHoist:yesNo(a.physical), canDiapers:yesNo(a.physical), knowsDementia:yesNo(a.dementia),
     notes:clean(`ניסיון עם קשישים: ${a.elderly||"—"}\nעבד בישראל: ${a.israel||"—"}\nלינה: ${a.live||"—"}\nחוזקות: ${a.strengths||"—"}\nוויזה: ${a.visa||"—"}`,1000),
     tags:["ראיון AI"], starred:false,
-    activities:[{id:uid("a"),text:partial?"ראיון חלקי נשמר אוטומטית":"ראיון AI הושלם — פרופיל נוצר",by:"יעל (AI)",at:now()}],
+    activities:[{id:uid("a"),text:partial?"ראיון חלקי נשמר אוטומטית":"ראיון AI הושלם — פרופיל נוצר",by:"מאור (AI)",at:now()}],
     _deleted:false,
     interview:{messages:ivState.messages.slice(),language:ivState.lang,completedAt:partial?null:now(),extracted:a}
   };
@@ -2330,7 +2338,7 @@ async function callAI(messages,system){
   throw lastErr||new Error("AI failed");
 }
 function aiInterviewSystem(lang){
-  return `את "יעל", מגייסת חמה ומקצועית בחברת "עוגן סיעוד". נהלי ראיון קצר וטבעי בשפה: ${lang}.
+  return `אתה "מאור", מגייס חם ומקצועי בחברת "עוגן סיעוד". נהלי ראיון קצר וטבעי בשפה: ${lang}.
 ההודעה הראשונה כבר שאלה את השם המלא. אספי בהדרגה — שאלה אחת בלבד בכל הודעה — את 11 הפרטים:
 שם מלא, מדינת מוצא, שנות ניסיון בטיפול, ניסיון עם קשישים, האם עבד/ה בישראל, נכונות ללינה בבית המטופל,
 ציפיית שכר חודשית בשקלים, ניסיון עם אלצהיימר/דמנציה, יכולת טיפול גופני (הרמה/חיתולים), חוזקות, וסטטוס ויזה.
@@ -2417,7 +2425,6 @@ function callerId(){
    LOCK SCREEN
    ============================================================ */
 let attempts=0,locked=false;
-const PIN_DEFAULT="2002דביר";
 function initLock(){
   const inp=$("#pinInput");
   $("#pinGo").onclick=checkPin;
@@ -2428,8 +2435,8 @@ function checkPin(){
   if(locked)return;
   const inp=$("#pinInput"); const val=inp.value;
   if(!val)return;
-  const pin=localStorage.getItem("ogenPIN")||PIN_DEFAULT;
-  if(val===pin){unlock();}
+  const su=db.staff.find(s=>s.code&&s.code===val);
+  if(su){localStorage.setItem("ogenUser",su.name);unlock();}
   else{
     attempts++; inp.value=""; inp.classList.add("shake");
     setTimeout(()=>inp.classList.remove("shake"),450);
