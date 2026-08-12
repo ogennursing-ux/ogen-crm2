@@ -393,8 +393,12 @@ table.tbl tr:hover td{background:var(--mist)}
         <circle cx="12" cy="5" r="2.5"/><path d="M12 7.5V21M5 12H3s0 6 9 9c9-3 9-9 9-9h-2M5 12a7 7 0 0 0 14 0"/></svg>
     </div>
     <h1>עוגן CRM</h1>
-    <p>מערכת ההשמה — הזינו קוד גישה</p>
-    <input id="pinInput" type="password" autocomplete="off" placeholder="קוד גישה"
+    <p>מערכת ההשמה — בחרו שם והזינו סיסמה</p>
+    <select id="loginName"
+      style="width:100%;height:54px;border-radius:14px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);color:#fff;text-align:center;font-size:16px;padding:0 16px;margin-bottom:12px">
+      <option value="">בחר/י שם</option>
+    </select>
+    <input id="pinInput" type="password" autocomplete="off" placeholder="סיסמה"
       style="width:100%;height:54px;border-radius:14px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);color:#fff;text-align:center;font-size:19px;letter-spacing:2px;padding:0 16px;margin-bottom:14px">
     <button id="pinGo"
       style="width:100%;height:50px;border-radius:14px;background:var(--sand);color:var(--sea-950);font-weight:800;font-size:16px">כניסה</button>
@@ -2426,22 +2430,26 @@ function callerId(){
    ============================================================ */
 let attempts=0,locked=false;
 function initLock(){
-  const inp=$("#pinInput");
+  const sel=$("#loginName"), inp=$("#pinInput");
+  sel.innerHTML=`<option value="">בחר/י שם</option>`+db.staff.map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("");
   $("#pinGo").onclick=checkPin;
+  sel.onkeydown=e=>{if(e.key==="Enter")inp.focus();};
+  sel.onchange=()=>inp.focus();
   inp.onkeydown=e=>{if(e.key==="Enter")checkPin();};
-  inp.focus();
+  sel.focus();
 }
 function checkPin(){
   if(locked)return;
-  const inp=$("#pinInput"); const val=inp.value;
-  if(!val)return;
-  const su=db.staff.find(s=>s.code&&s.code===val);
+  const sel=$("#loginName"), inp=$("#pinInput");
+  const staffId=sel.value, val=inp.value;
+  if(!staffId||!val)return;
+  const su=db.staff.find(s=>s.id===staffId&&s.code&&s.code===val);
   if(su){localStorage.setItem("ogenUser",su.name);unlock();}
   else{
     attempts++; inp.value=""; inp.classList.add("shake");
     setTimeout(()=>inp.classList.remove("shake"),450);
     if(attempts>=5){locked=true;lockout();}
-    else $("#lockMsg").textContent=`קוד שגוי — נותרו ${5-attempts} ניסיונות`;
+    else $("#lockMsg").textContent=`שם/סיסמה שגויים — נותרו ${5-attempts} ניסיונות`;
   }
 }
 function lockout(){
