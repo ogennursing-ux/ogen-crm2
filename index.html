@@ -533,7 +533,7 @@ function load(){
   try{const raw=localStorage.getItem(LS_KEY); if(raw){db=JSON.parse(raw);}}
   catch(e){console.warn("load failed",e);}
   for(const c of ["leads","workers","matches","staff","templates","outcomes"]) if(!Array.isArray(db[c])) db[c]=[];
-  if(!db.staff.length) db.staff=[{id:"u1",name:"דביר בנגי",role:"מנהל השמה",code:"2002דביר"},{id:"u4",name:"ניריה ביתן",role:"מנהל השמה",code:"2002ניריה"},{id:"u5",name:"יעל ביתן",role:"מנהל השמה",code:"2002יעל"},{id:"u6",name:"יהודה ארדוט",role:"מנהל השמה",code:"2002יהודה"},{id:"u2",name:"יוסי כהן",role:"רכז"},{id:"u3",name:"מרים אבוקסיס",role:"רכזת בכירה"}];
+  if(!db.staff.length) db.staff=[{id:"u1",name:"דביר בנגי",role:"מנהל השמה",code:"2002דביר"},{id:"u4",name:"ניריה ביתן",role:"מנהל השמה",code:"2002ניריה"},{id:"u5",name:"יעל ביתן",role:"מנהל השמה",code:"2002יעל"},{id:"u6",name:"יהודה ארדוט",role:"מנהל השמה",code:"2002יהודה"}];
   purgeOldDeleted(); // auto-clean recycle bin after 30 days (spec א7)
   sanitizeDb(db);
   computeLearning(); // build LEARNED weights from outcome history
