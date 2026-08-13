@@ -2158,7 +2158,7 @@ function launchInterview(){
 }
 function beginInterview(lang){
   const L=IV_LANGS[lang];
-  ivState={lang,code:L.code,idx:-1,answers:{},messages:[],mode:hasAI()?"ai":"script",system:aiInterviewSystem(lang)};
+  ivState={lang,code:L.code,idx:-1,answers:{},messages:[],mode:"ai",system:aiInterviewSystem(lang)};
   $("#ivBody").innerHTML="";$("#ivFoot").style.display="flex";
   ivBotSay(L.greet,()=>{ivState.idx=0;});
   $("#ivSend").onclick=ivSubmit; $("#ivInput").onkeydown=e=>{if(e.key==="Enter")ivSubmit();};
@@ -2196,7 +2196,7 @@ function ivSubmit(){
 async function ivSubmitAI(){
   ivTyping(true);$("#ivStatus").textContent="מקלידה…";
   let reply;
-  try{ reply=await callAI(ivState.messages,ivState.system); }
+  try{ reply=await callInterviewAI(ivState.messages,ivState.system); }
   catch(e){ // graceful fallback → scripted question
     ivTyping(false);$("#ivStatus").textContent="מקוונת"; ivState.mode="script";
     ivState.idx=Math.min(Object.keys(ivState.answers).length,IV_QUESTIONS.length-1);
@@ -2341,12 +2341,26 @@ async function callAI(messages,system){
   }
   throw lastErr||new Error("AI failed");
 }
+// The interview link is opened by a candidate on their own, fresh browser (no geminiApiKey
+// in localStorage there), so it needs a server-side key — proxied through the same Netlify
+// bridge used for WhatsApp. Falls back to the direct client call when a local key IS set
+// (e.g. a coordinator previewing the interview from inside the CRM).
+const AI_PROXY_URL="https://hibur-wa-bridge.netlify.app/.netlify/functions/ai-interview";
+async function callInterviewAI(messages,system){
+  if(hasAI()) return callAI(messages,system);
+  const r=await fetch(AI_PROXY_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages,system})});
+  const data=await r.json();
+  if(!r.ok||data.error||!data.text) throw new Error("ai-proxy-failed");
+  return data.text.trim();
+}
 function aiInterviewSystem(lang){
-  return `אתה "מאור", מגייס חם ומקצועי בחברת "עוגן סיעוד". נהלי ראיון קצר וטבעי בשפה: ${lang}.
-ההודעה הראשונה כבר שאלה את השם המלא. אספי בהדרגה — שאלה אחת בלבד בכל הודעה — את 11 הפרטים:
+  return `אתה "מאור", מגייס חם ומקצועי בחברת "עוגן סיעוד". נהל עם המועמד/ת שיחה טבעית וזורמת בשפה: ${lang} — לא תשאול נוקשה של שאלה ואז תשובה.
+ההודעה הראשונה כבר שאלה את השם המלא. המטרה שלך לאסוף בהדרגה, מתוך שיחה אמיתית, את 11 הפרטים:
 שם מלא, מדינת מוצא, שנות ניסיון בטיפול, ניסיון עם קשישים, האם עבד/ה בישראל, נכונות ללינה בבית המטופל,
 ציפיית שכר חודשית בשקלים, ניסיון עם אלצהיימר/דמנציה, יכולת טיפול גופני (הרמה/חיתולים), חוזקות, וסטטוס ויזה.
-הגיבי בחום לפני כל שאלה הבאה. כשכל הפרטים נאספו — כתבי משפט סיום ידידותי, ואז בשורה נפרדת המילה [DONE]
+קרא כל הודעה של המועמד/ת בעיון: אם סיפר/ה כמה דברים בבת אחת — קלוט את כולם ואל תשאל שוב על מה שכבר נענה.
+אם כתב/ה משהו מעניין, לא צפוי, או שאל/ה שאלה — הגב לזה ספציפית ובחום (לא רק "תודה, השאלה הבאה") לפני שתמשיך.
+שאל שאלה אחת בלבד בכל הודעה, ורק על פרט שעדיין חסר. כשכל הפרטים נאספו — כתוב משפט סיום ידידותי, ואז בשורה נפרדת המילה [DONE]
 ואחריה JSON תקין בלבד עם המפתחות:
 {"name","nationality","experience","elderly","israel","live","salary","dementia","physical","strengths","visa"}.`;
 }
