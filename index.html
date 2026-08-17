@@ -1200,7 +1200,9 @@ function openWorker(id){
 }
 function newWorker(){return{id:uid("wrk"),dateAdded:now(),status:"זמין",source:"ידני",name:"",lastName:"",nationality:"",
   gender:"",age:"",birthDate:"",maritalStatus:"",phone:"",city:"",street:"",languages:"",experience:"",expectedSalary:"",
-  canHoist:"",canDiapers:"",knowsDementia:"",notes:"",tags:[],starred:false,activities:[],_deleted:false,interview:null};}
+  canHoist:"",canDiapers:"",knowsDementia:"",notes:"",tags:[],starred:false,activities:[],_deleted:false,interview:null,
+  passport:"",arrivalDate:"",workHistory:"",salaryPast:"",genderFlex:"",coupleHome:"",region:"",regionFlexible:"",
+  photo:"",passportPhoto:"",visaPhoto:"",video:""};}
 function workerForm(w){
   return `<form id="workerForm">
     <div class="section-label">${svg(I.workers,14)} פרטים אישיים</div>
@@ -1232,19 +1234,42 @@ function workerForm(w){
       <div class="field"><label>חיתולים</label>${yn("canDiapers",w.canDiapers)}</div>
       <div class="field"><label>דמנציה</label>${yn("knowsDementia",w.knowsDementia)}</div>
     </div>
+    <div class="section-label">${svg(I.workers,14)} פרטי הגירה ועבודה קודמת</div>
+    <div class="grid3">
+      <div class="field"><label>מספר דרכון</label><input name="passport" value="${esc(w.passport)}" dir="ltr" style="text-align:right"></div>
+      <div class="field"><label>תאריך הגעה לישראל</label><input name="arrivalDate" value="${esc(w.arrivalDate)}" placeholder="למשל 03/2022"></div>
+      <div class="field"><label>שכר בעבודה קודמת</label><input name="salaryPast" type="number" value="${esc(w.salaryPast)}"></div>
+    </div>
+    <div class="field"><label>מקומות עבודה קודמים (מטופלים, תאריכים)</label><textarea name="workHistory">${esc(w.workHistory)}</textarea></div>
+    <div class="section-label">${svg(I.location,14)} העדפות עבודה</div>
+    <div class="grid3">
+      <div class="field"><label>אזור מועדף</label><input name="region" value="${esc(w.region)}" placeholder="מרכז / צפון / דרום…"></div>
+      <div class="field"><label>גמיש/ה לאזורים נוספים</label>${yn("regionFlexible",w.regionFlexible)}</div>
+      <div class="field"><label>גמיש/ה למגדר המטופל/ת</label>${yn("genderFlex",w.genderFlex)}</div>
+    </div>
+    <div class="field"><label>מוכן/ה לעבוד כשיש בן/בת זוג נוסף/ת בבית</label>${yn("coupleHome",w.coupleHome)}</div>
     <div class="grid3">
       <div class="field"><label>סטטוס</label><select name="status">${WORK_ST.map(s=>`<option ${w.status===s?"selected":""}>${s}</option>`).join("")}</select></div>
       <div class="field"><label>מקור</label><input name="source" value="${esc(w.source)}"></div>
       <div class="field"><label>תגיות</label><input name="tags" value="${esc((w.tags||[]).join(", "))}"></div>
     </div>
+    ${(w.photo||w.passportPhoto||w.visaPhoto||w.video)?`<div class="section-label">${svg(I.check,14)} מסמכים וקבצים מהראיון</div>
+    <div class="grid3" style="font-size:13px">
+      ${w.photo?`<a class="btn sm" href="${esc(w.photo)}" target="_blank">${svg(I.check,14)} תמונה</a>`:""}
+      ${w.passportPhoto?`<a class="btn sm" href="${esc(w.passportPhoto)}" target="_blank">${svg(I.check,14)} דרכון</a>`:""}
+      ${w.visaPhoto?`<a class="btn sm" href="${esc(w.visaPhoto)}" target="_blank">${svg(I.check,14)} ויזה</a>`:""}
+      ${w.video?`<a class="btn sm" href="${esc(w.video)}" target="_blank">${svg(I.check,14)} סרטון</a>`:""}
+    </div>`:""}
     <div class="field"><label>הערות</label><textarea name="notes">${esc(w.notes)}</textarea></div>
   </form>`;
 }
 function collectWorker(w){
   const f=$("#workerForm");if(!f)return;const g=n=>f.elements[n]?f.elements[n].value:w[n];
   ["name","lastName","nationality","gender","phone","city","street","languages","canHoist","canDiapers","knowsDementia",
-   "status","source","notes"].forEach(n=>w[n]=clean(g(n),n==="notes"?1000:120));
+   "status","source","notes","passport","arrivalDate","workHistory","region","regionFlexible","genderFlex","coupleHome"]
+   .forEach(n=>w[n]=clean(g(n),n==="notes"||n==="workHistory"?1000:120));
   w.age=cleanInt(g("age"),0,99); w.experience=cleanInt(g("experience"),0,80); w.expectedSalary=cleanInt(g("expectedSalary"),0,50000);
+  w.salaryPast=cleanInt(g("salaryPast"),0,50000);
   w.tags=g("tags").split(",").map(t=>clean(t,30)).filter(Boolean);
 }
 
@@ -2114,9 +2139,45 @@ function toast(msg,type="ok"){
   $("#toasts").appendChild(t);setTimeout(()=>{t.style.opacity="0";t.style.transform="translateY(10px)";setTimeout(()=>t.remove(),250);},2800);
 }
 
+/* ---------- media hosting (Cloudinary, unsigned preset — no secret in client code) ---------- */
+const CLOUDINARY_CLOUD="jf9wdasm", CLOUDINARY_PRESET="hibur_unsigned";
+function uploadToCloudinary(fileOrBlob,{onProgress}={}){
+  return new Promise((resolve,reject)=>{
+    const fd=new FormData(); fd.append("file",fileOrBlob); fd.append("upload_preset",CLOUDINARY_PRESET);
+    const xhr=new XMLHttpRequest();
+    xhr.open("POST",`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/auto/upload`);
+    xhr.upload.onprogress=e=>{if(onProgress&&e.lengthComputable)onProgress(Math.round(e.loaded/e.total*100));};
+    xhr.onload=()=>{try{const d=JSON.parse(xhr.responseText);
+      if(xhr.status>=200&&xhr.status<300)resolve(d); else reject(new Error((d.error&&d.error.message)||"upload failed"));
+    }catch(e){reject(e);}};
+    xhr.onerror=()=>reject(new Error("network error"));
+    xhr.send(fd);
+  });
+}
+
 /* ============================================================
    INTERVIEW ENGINE (?mode=interview)  — spec א6
    ============================================================ */
+const IV_UPLOAD_LABELS={
+  "עברית":{title:"תמונות ומסמכים",note:"משפחות שמחפשות מטפל/ת רואות את הפרופיל שלך, אז כדאי לצרף תמונה. אם תעלה/י סרטון — עדיף בעברית או אנגלית.",
+    photo:"תמונה שלך",passport:"תמונת דרכון",visa:"תמונת ויזה",video:"סרטון היכרות (רשות)",skip:"דלג/י",done:"סיום",uploading:"מעלה…",uploaded:"הועלה ✓"},
+  "English":{title:"Photos & documents",note:"Families looking for a caregiver see your profile, so a photo really helps. If you upload a video, Hebrew or English is best.",
+    photo:"Your photo",passport:"Passport photo",visa:"Visa photo",video:"Intro video (optional)",skip:"Skip",done:"Finish",uploading:"Uploading…",uploaded:"Uploaded ✓"},
+  "Oʻzbekcha":{title:"Rasmlar va hujjatlar",note:"Parvarishchi izlayotgan oilalar profilingizni ko'radi, shuning uchun rasm juda foydali. Video yuklasangiz, ivrit yoki ingliz tili afzal.",
+    photo:"Sizning rasmingiz",passport:"Pasport surati",visa:"Viza surati",video:"Tanishuv videosi (ixtiyoriy)",skip:"Oʻtkazib yuborish",done:"Tugatish",uploading:"Yuklanmoqda…",uploaded:"Yuklandi ✓"},
+  "Русский":{title:"Фото и документы",note:"Семьи, ищущие сиделку, видят ваш профиль — фото очень поможет. Если загружаете видео, лучше на иврите или английском.",
+    photo:"Ваше фото",passport:"Фото паспорта",visa:"Фото визы",video:"Видео-визитка (по желанию)",skip:"Пропустить",done:"Готово",uploading:"Загрузка…",uploaded:"Загружено ✓"},
+  "Română":{title:"Fotografii și documente",note:"Familiile care caută un îngrijitor văd profilul dvs., așa că o fotografie ajută mult. Dacă încărcați un videoclip, ebraica sau engleza sunt preferate.",
+    photo:"Fotografia dvs.",passport:"Fotografia pașaportului",visa:"Fotografia vizei",video:"Videoclip de prezentare (opțional)",skip:"Omite",done:"Finalizare",uploading:"Se încarcă…",uploaded:"Încărcat ✓"},
+  "Tagalog":{title:"Mga larawan at dokumento",note:"Nakikita ng mga pamilyang naghahanap ng caregiver ang profile mo, kaya malaking tulong ang larawan. Kung mag-upload ka ng video, mas maganda kung Hebrew o English.",
+    photo:"Larawan mo",passport:"Larawan ng pasaporte",visa:"Larawan ng visa",video:"Video introduction (opsyonal)",skip:"Laktawan",done:"Tapos na",uploading:"Ina-upload…",uploaded:"Na-upload ✓"},
+  "Español":{title:"Fotos y documentos",note:"Las familias que buscan cuidador/a ven tu perfil, así que una foto ayuda mucho. Si subes un video, hebreo o inglés es preferible.",
+    photo:"Tu foto",passport:"Foto del pasaporte",visa:"Foto de la visa",video:"Video de presentación (opcional)",skip:"Omitir",done:"Finalizar",uploading:"Subiendo…",uploaded:"Subido ✓"},
+  "فارسی":{title:"عکس‌ها و مدارک",note:"خانواده‌هایی که به دنبال مراقب هستند پروفایل شما را می‌بینند، پس عکس واقعاً کمک می‌کند. اگر ویدیو آپلود می‌کنید، ترجیحاً به زبان عبری یا انگلیسی باشد.",
+    photo:"عکس شما",passport:"عکس پاسپورت",visa:"عکس ویزا",video:"ویدیوی معرفی (اختیاری)",skip:"رد کردن",done:"پایان",uploading:"در حال بارگذاری…",uploaded:"بارگذاری شد ✓"},
+  "አማርኛ":{title:"ፎቶዎች እና ሰነዶች",note:"አስታማሚ የሚፈልጉ ቤተሰቦች መገለጫዎን ያያሉ፣ ስለዚህ ፎቶ በጣም ይረዳል። ቪዲዮ የሚያስገቡ ከሆነ በዕብራይስጥ ወይም በእንግሊዝኛ ቢሆን ይመረጣል።",
+    photo:"የእርስዎ ፎቶ",passport:"የፓስፖርት ፎቶ",visa:"የቪዛ ፎቶ",video:"የመተዋወቂያ ቪዲዮ (አማራጭ)",skip:"ዝለል",done:"ጨርስ",uploading:"በመስቀል ላይ…",uploaded:"ተልኳል ✓"},
+};
 const IV_LANGS={ // 9 languages per spec (א6)
   "עברית":{code:"he",greet:"שלום! אני מאור מחבר עוגן 😊 אני אשאל אותך כמה שאלות קצרות כדי להכיר אותך. מה שמך המלא?",
     thanks:"תודה רבה!",done:"מעולה, סיימנו! 🎉 הפרטים שלך נשמרו ורכז/ת שלנו יחזור/תחזור אליך בקרוב. יום נעים!"},
@@ -2137,16 +2198,26 @@ const IV_LANGS={ // 9 languages per spec (א6)
   "አማርኛ":{code:"am",greet:"ሰላም! እኔ ከኦገን ማኦር ነኝ 😊 ጥቂት አጭር ጥያቄዎችን እጠይቅዎታለሁ። ሙሉ ስምዎ ማን ነው?",
     thanks:"በጣም አመሰግናለሁ!",done:"በጣም ጥሩ፣ ጨርሰናል! 🎉 መረጃዎ ተቀምጧል እናም አስተባባሪያችን በቅርቡ ያገኝዎታል።"},
 };
-const IV_QUESTIONS=[ // 11 info points (spec), translated into all 9 languages
+const IV_QUESTIONS=[ // 21 info points, translated into all 9 languages
   {key:"name",q:{he:"מה שמך המלא?",en:"What is your full name?",uz:"Toʻliq ismingiz nima?",ru:"Как вас зовут (полное имя)?",ro:"Care este numele dvs. complet?",tl:"Ano ang buong pangalan mo?",es:"¿Cuál es tu nombre completo?",fa:"نام کامل شما چیست؟",am:"ሙሉ ስምዎ ማን ነው?"}},
+  {key:"passport",q:{he:"מה מספר הדרכון או תעודת הזהות שלך?",en:"What is your passport or ID number?",uz:"Pasport yoki shaxsiy guvohnoma raqamingiz nima?",ru:"Какой у вас номер паспорта или удостоверения личности?",ro:"Care este numărul dvs. de pașaport sau carte de identitate?",tl:"Ano ang numero ng iyong pasaporte o ID?",es:"¿Cuál es tu número de pasaporte o identificación?",fa:"شماره پاسپورت یا کارت شناسایی شما چیست؟",am:"የፓስፖርት ወይም መታወቂያ ቁጥርዎ ስንት ነው?"}},
   {key:"nationality",q:{he:"מאיזו מדינה את/ה?",en:"Which country are you from?",uz:"Qaysi davlatdansiz?",ru:"Из какой вы страны?",ro:"Din ce țară sunteți?",tl:"Taga-saang bansa ka?",es:"¿De qué país eres?",fa:"اهل کدام کشور هستید؟",am:"ከየትኛው ሀገር ነዎት?"}},
+  {key:"arrivalDate",q:{he:"מתי בדיוק הגעת לישראל? (תאריך משוער מספיק)",en:"Exactly when did you arrive in Israel? (approximate date is fine)",uz:"Isroilga aniq qachon kelgansiz? (taxminiy sana ham bo'ladi)",ru:"Когда именно вы приехали в Израиль? (можно приблизительно)",ro:"Când exact ați ajuns în Israel? (o dată aproximativă e suficientă)",tl:"Kailan ka eksaktong dumating sa Israel? (tinatayang petsa ay okay lang)",es:"¿Cuándo llegaste exactamente a Israel? (una fecha aproximada está bien)",fa:"دقیقاً چه زمانی وارد اسرائیل شدید؟ (تاریخ تقریبی هم کافی است)",am:"በትክክል መቼ ወደ እስራኤል መጡ? (የግምት ቀን ይበቃል)"}},
+  {key:"gender",q:{he:"את/ה גבר או אישה?",en:"Are you male or female?",uz:"Siz erkak yoki ayolmisiz?",ru:"Вы мужчина или женщина?",ro:"Sunteți bărbat sau femeie?",tl:"Lalaki ka ba o babae?",es:"¿Eres hombre o mujer?",fa:"شما مرد هستید یا زن؟",am:"ወንድ ወይስ ሴት ነዎት?"}},
+  {key:"genderFlex",q:{he:"האם יש לך העדפה או הגבלה לגבי מגדר המטופל/ת שתטפל/י בו/בה?",en:"Do you have any preference or restriction regarding the gender of the patient you'd care for?",uz:"Parvarish qilishga tayyor bo'lgan bemorning jinsi bo'yicha afzallik yoki cheklovingiz bormi?",ru:"Есть ли у вас предпочтения или ограничения по полу пациента, за которым вы будете ухаживать?",ro:"Aveți vreo preferință sau restricție privind sexul pacientului de care v-ați ocupa?",tl:"May kagustuhan o limitasyon ka ba tungkol sa kasarian ng pasyenteng aalagaan mo?",es:"¿Tienes alguna preferencia o restricción respecto al género del paciente que cuidarías?",fa:"آیا در مورد جنسیت بیماری که از او مراقبت می‌کنید ترجیح یا محدودیتی دارید؟",am:"ስለሚንከባከቡት ታካሚ ጾታ ምርጫ ወይም ገደብ አለዎት?"}},
   {key:"experience",q:{he:"כמה שנות ניסיון יש לך בטיפול?",en:"How many years of caregiving experience do you have?",uz:"Parvarish sohasida necha yillik tajribangiz bor?",ru:"Сколько лет опыта ухода у вас есть?",ro:"Câți ani de experiență aveți în îngrijire?",tl:"Ilang taon ka nang nag-aalaga?",es:"¿Cuántos años de experiencia tienes en cuidado de personas?",fa:"چند سال تجربه مراقبت دارید؟",am:"በእንክብካቤ ስንት ዓመት ልምድ አለዎት?"}},
+  {key:"workHistory",q:{he:"ספר/י על מקומות העבודה הקודמים שלך כמטפל/ת — כמה שיותר: אצל מי טיפלת, ומתי בדיוק התחלת וסיימת בכל מקום?",en:"Tell me about your previous caregiving jobs — as many as you can: who you cared for, and exactly when you started and finished at each place.",uz:"Oldingi parvarishchilik ishlaringiz haqida gapirib bering — imkon qadar ko'proq: kimga qaradingiz va har bir joyda aniq qachon boshlab, qachon tugatgansiz?",ru:"Расскажите о ваших предыдущих местах работы по уходу — как можно подробнее: за кем вы ухаживали и когда именно начали и закончили на каждом месте?",ro:"Povestiți-mi despre locurile dvs. de muncă anterioare ca îngrijitor — cât mai multe: de cine ați avut grijă și exact când ați început și terminat la fiecare loc?",tl:"Kwentuhan mo ako tungkol sa mga naunang trabaho mo bilang caregiver — kung marami, sabihin lahat: sino ang inalagaan mo, at kailan eksaktong nagsimula at natapos ka sa bawat lugar?",es:"Cuéntame sobre tus trabajos anteriores como cuidador/a — todos los que puedas: a quién cuidaste, y exactamente cuándo empezaste y terminaste en cada lugar.",fa:"درباره کارهای قبلی خود به‌عنوان مراقب بگویید — تا جایی که می‌توانید: از چه کسی مراقبت کرده‌اید و دقیقاً چه زمانی در هر محل شروع و تمام کرده‌اید؟",am:"እንደ አስታማሚ ስለ ቀድሞ የስራ ቦታዎችዎ ይንገሩኝ — በተቻለ መጠን ብዙ፦ ማንን ተንከባከቡ፣ እና በእያንዳንዱ ቦታ በትክክል መቼ እንደጀመሩ እና እንደጨረሱ?"}},
   {key:"elderly",q:{he:"יש לך ניסיון עם קשישים? ספר/י בקצרה.",en:"Do you have experience with the elderly? Briefly.",uz:"Keksalar bilan ishlagan tajribangiz bormi? Qisqacha aytib bering.",ru:"Есть ли опыт с пожилыми? Кратко.",ro:"Aveți experiență cu persoane în vârstă? Pe scurt.",tl:"May karanasan ka ba sa matatanda?",es:"¿Tienes experiencia con personas mayores? Cuéntame brevemente.",fa:"تجربه‌ای در مراقبت از سالمندان دارید؟ به‌طور خلاصه بگویید.",am:"ከአዛውንቶች ጋር ልምድ አለዎት? በአጭሩ ይንገሩኝ።"}},
   {key:"israel",q:{he:"האם עבדת בישראל בעבר?",en:"Have you worked in Israel before?",uz:"Ilgari Isroilda ishlaganmisiz?",ru:"Вы работали в Израиле раньше?",ro:"Ați mai lucrat în Israel?",tl:"Nagtrabaho ka na ba sa Israel?",es:"¿Has trabajado en Israel antes?",fa:"قبلاً در اسرائیل کار کرده‌اید؟",am:"ከዚህ በፊት በእስራኤል ሰርተዋል?"}},
   {key:"live",q:{he:"את/ה מוכן/ה ללון בבית המטופל?",en:"Are you willing to live in the patient's home?",uz:"Bemor uyida yashashga tayyormisiz?",ru:"Готовы ли вы жить в доме пациента?",ro:"Sunteți dispus/dispusă să locuiți în casa pacientului?",tl:"Handa ka bang tumira sa bahay ng pasyente?",es:"¿Estás dispuesto/a a vivir en la casa del paciente?",fa:"آیا حاضرید در خانه بیمار زندگی کنید؟",am:"በታካሚው ቤት ውስጥ ለመኖር ፈቃደኛ ነዎት?"}},
   {key:"salary",q:{he:"מהי ציפיית השכר החודשית שלך (בשקלים)?",en:"What is your expected monthly salary (in ILS)?",uz:"Oylik maosh kutilmangiz qancha (shekelda)?",ru:"Какая у вас ожидаемая зарплата (в шекелях)?",ro:"Care este salariul lunar dorit (în șekeli)?",tl:"Magkano ang inaasahang sahod mo (ILS)?",es:"¿Cuál es tu expectativa salarial mensual (en shekels)?",fa:"حقوق ماهانه مورد انتظار شما چقدر است (به شکل)؟",am:"የሚጠበቀው ወርሃዊ ደመወዝ ስንት ነው (በሸቀል)?"}},
+  {key:"salaryPast",q:{he:"כמה הרווחת בערך בעבודה הקודמת שלך (חודשי, בשקלים)?",en:"Roughly how much did you earn at your previous job (monthly, in ILS)?",uz:"Oldingi ishingizda taxminan qancha maosh olgansiz (oylik, shekelda)?",ru:"Сколько примерно вы зарабатывали на предыдущей работе (в месяц, в шекелях)?",ro:"Cât ați câștigat aproximativ la locul de muncă anterior (lunar, în șekeli)?",tl:"Magkano humigit-kumulang ang kinita mo sa naunang trabaho (buwanang, sa ILS)?",es:"¿Aproximadamente cuánto ganabas en tu trabajo anterior (mensual, en shekels)?",fa:"تقریباً چقدر در شغل قبلی خود درآمد داشتید (ماهانه، به شکل)؟",am:"በቀድሞ ስራዎ በግምት ስንት ያገኙ ነበር (ወርሃዊ፣ በሸቀል)?"}},
   {key:"dementia",q:{he:"יש לך ניסיון עם אלצהיימר/דמנציה? (כן/לא)",en:"Experience with Alzheimer's/dementia? (yes/no)",uz:"Altsgeymer/demensiya bilan tajribangiz bormi? (ha/yo'q)",ru:"Опыт с деменцией? (да/нет)",ro:"Experiență cu Alzheimer/demență? (da/nu)",tl:"May karanasan sa dementia? (oo/hindi)",es:"¿Experiencia con Alzheimer/demencia? (sí/no)",fa:"تجربه با آلزایمر/زوال عقل؟ (بله/خیر)",am:"ከአልዛይመር/የመርሳት በሽታ ጋር ልምድ አለዎት? (አዎ/አይ)"}},
-  {key:"physical",q:{he:"את/ה מסוגל/ת לטיפול גופני (הרמה, חיתולים)? (כן/לא)",en:"Can you do physical care (lifting, diapers)? (yes/no)",uz:"Jismoniy parvarish qila olasizmi (ko'tarish, tagliklar)? (ha/yo'q)",ru:"Физический уход (подъём, памперсы)? (да/нет)",ro:"Puteți face îngrijire fizică (ridicare, scutece)? (da/nu)",tl:"Kaya mo ba ang physical care? (oo/hindi)",es:"¿Puedes realizar cuidado físico (levantar, pañales)? (sí/no)",fa:"می‌توانید مراقبت جسمی انجام دهید (بلند کردن، پوشک)؟ (بله/خیر)",am:"የአካል እንክብካቤ ማድረግ ይችላሉ (ማንሳት፣ ዳይፐር)? (አዎ/አይ)"}},
+  {key:"hoist",q:{he:"את/ה מוכן/ה לעבוד עם מנוף להרמת המטופל/ת? (כן/לא)",en:"Are you willing to work with a hoist for lifting the patient? (yes/no)",uz:"Bemorni ko'tarish uchun ko'targich bilan ishlashga tayyormisiz? (ha/yo'q)",ru:"Готовы ли работать с подъёмником для пациента? (да/нет)",ro:"Sunteți dispus/dispusă să lucrați cu un dispozitiv de ridicare a pacientului? (da/nu)",tl:"Handa ka bang gumamit ng hoist para buhatin ang pasyente? (oo/hindi)",es:"¿Estás dispuesto/a a trabajar con un elevador para levantar al paciente? (sí/no)",fa:"آیا حاضرید با دستگاه بالابر برای جابه‌جایی بیمار کار کنید؟ (بله/خیر)",am:"ታካሚውን ለማንሳት ማንሻ (hoist) ተጠቅመው ለመስራት ፈቃደኛ ነዎት? (አዎ/አይ)"}},
+  {key:"diapers",q:{he:"את/ה מוכן/ה לטיפול אישי כולל החלפת חיתולים? (כן/לא)",en:"Are you willing to do personal care including diaper changing? (yes/no)",uz:"Shaxsiy parvarish, jumladan tagliklarni almashtirishga tayyormisiz? (ha/yo'q)",ru:"Готовы ли к личному уходу, включая смену подгузников? (да/нет)",ro:"Sunteți dispus/dispusă la îngrijire personală, inclusiv schimbarea scutecelor? (da/nu)",tl:"Handa ka bang gumawa ng personal care kabilang ang pagpalit ng diaper? (oo/hindi)",es:"¿Estás dispuesto/a a hacer cuidado personal, incluido el cambio de pañales? (sí/no)",fa:"آیا حاضرید مراقبت شخصی از جمله تعویض پوشک انجام دهید؟ (بله/خیر)",am:"ዳይፐር መቀየርን ጨምሮ የግል እንክብካቤ ለማድረግ ፈቃደኛ ነዎት? (አዎ/አይ)"}},
+  {key:"coupleHome",q:{he:"את/ה מוכן/ה לעבוד בבית שבו יש גם בן/בת זוג נוסף/ת של המטופל/ת? (כן/לא)",en:"Are you willing to work in a home where the patient's spouse also lives? (yes/no)",uz:"Bemorning turmush o'rtog'i ham yashaydigan uyda ishlashga tayyormisiz? (ha/yo'q)",ru:"Готовы ли работать в доме, где также живёт супруг(а) пациента? (да/нет)",ro:"Sunteți dispus/dispusă să lucrați într-o casă unde locuiește și soțul/soția pacientului? (da/nu)",tl:"Handa ka bang magtrabaho sa bahay na may kasamang asawa ng pasyente? (oo/hindi)",es:"¿Estás dispuesto/a a trabajar en un hogar donde también vive el/la cónyuge del paciente? (sí/no)",fa:"آیا حاضرید در خانه‌ای که همسر بیمار نیز در آن زندگی می‌کند کار کنید؟ (بله/خیر)",am:"የታካሚው የትዳር ጓደኛ በሚኖርበት ቤት ውስጥ ለመስራት ፈቃደኛ ነዎት? (አዎ/አይ)"}},
+  {key:"region",q:{he:"באיזה אזור בארץ תרצה/י לעבוד (מרכז/צפון/דרום), ואת/ה גמיש/ה לאזורים נוספים?",en:"Which region would you like to work in (center/north/south), and are you flexible for other regions?",uz:"Mamlakatning qaysi mintaqasida ishlamoqchisiz (markaz/shimol/janub), va boshqa hududlarga ham moslashuvchanmisiz?",ru:"В каком регионе страны вы хотите работать (центр/север/юг), и готовы ли вы к другим регионам?",ro:"În ce regiune a țării ați dori să lucrați (centru/nord/sud), și sunteți flexibil/ă pentru alte regiuni?",tl:"Saang rehiyon ka gustong magtrabaho (gitna/hilaga/timog), at flexible ka ba sa ibang rehiyon?",es:"¿En qué región del país te gustaría trabajar (centro/norte/sur), y eres flexible para otras regiones?",fa:"در کدام منطقه کشور می‌خواهید کار کنید (مرکز/شمال/جنوب)، و آیا برای مناطق دیگر هم انعطاف‌پذیر هستید؟",am:"በየትኛው የሀገሪቱ ክፍል መስራት ይፈልጋሉ (መሃል/ሰሜን/ደቡብ)፣ እና ለሌሎች አካባቢዎችም ተለዋዋጭ ነዎት?"}},
+  {key:"languages",q:{he:"אילו שפות את/ה דובר/ת, ומה רמת השליטה שלך בכל אחת (מ-1 עד 10)?",en:"Which languages do you speak, and how would you rate your level in each (1 to 10)?",uz:"Qaysi tillarda gaplashasiz, va har birida darajangizni qanday baholaysiz (1 dan 10 gacha)?",ru:"На каких языках вы говорите, и как оцениваете свой уровень по каждому (от 1 до 10)?",ro:"Ce limbi vorbiți, și cum vă evaluați nivelul la fiecare (de la 1 la 10)?",tl:"Anong mga wika ang alam mong sabihin, at ano ang antas mo sa bawat isa (1 hanggang 10)?",es:"¿Qué idiomas hablas, y cómo calificarías tu nivel en cada uno (del 1 al 10)?",fa:"به چه زبان‌هایی صحبت می‌کنید و سطح خود را در هر کدام چگونه ارزیابی می‌کنید (از ۱ تا ۱۰)؟",am:"የትኞቹን ቋንቋዎች ይናገራሉ፣ እና በእያንዳንዱ ያለዎትን ደረጃ እንዴት ይገመግማሉ (ከ1 እስከ 10)?"}},
   {key:"strengths",q:{he:"מהם החוזקות שלך כמטפל/ת?",en:"What are your strengths as a caregiver?",uz:"Parvarishchi sifatida kuchli tomonlaringiz nima?",ru:"В чём ваши сильные стороны?",ro:"Care sunt punctele dvs. forte ca îngrijitor?",tl:"Ano ang mga lakas mo?",es:"¿Cuáles son tus fortalezas como cuidador/a?",fa:"نقاط قوت شما به‌عنوان یک مراقب چیست؟",am:"እንደ አስታማሚ ጥንካሬዎችዎ ምንድናቸው?"}},
   {key:"visa",q:{he:"מה סטטוס הוויזה שלך?",en:"What is your visa status?",uz:"Viza holatingiz qanday?",ru:"Каков ваш визовый статус?",ro:"Care este statutul dvs. de viză?",tl:"Ano ang visa status mo?",es:"¿Cuál es tu estatus de visa?",fa:"وضعیت ویزای شما چیست؟",am:"የቪዛ ሁኔታዎ ምንድን ነው?"}},
 ];
@@ -2197,8 +2268,11 @@ async function ivSubmitAI(){
   ivTyping(true);$("#ivStatus").textContent="מקלידה…";
   let reply;
   try{ reply=await callInterviewAI(ivState.messages,ivState.system); }
-  catch(e){ // graceful fallback → scripted question
+  catch(e){ // graceful fallback → scripted question — keep whatever the candidate just typed instead of discarding it
     ivTyping(false);$("#ivStatus").textContent="מקוונת"; ivState.mode="script";
+    const lastUser=[...ivState.messages].reverse().find(m=>m.role==="user");
+    const curQ=IV_QUESTIONS[ivState.idx];
+    if(lastUser&&curQ&&!(curQ.key in ivState.answers))ivState.answers[curQ.key]=lastUser.content;
     ivState.idx=Math.min(Object.keys(ivState.answers).length,IV_QUESTIONS.length-1);
     ivBubble("assistant",IV_QUESTIONS[ivState.idx].q[ivState.code]||IV_QUESTIONS[ivState.idx].q.en); return; }
   ivTyping(false);$("#ivStatus").textContent="מקוונת";
@@ -2227,27 +2301,68 @@ function finishInterview(){
   const L=IV_LANGS[ivState.lang];
   ivBotSay(L.done,()=>{
     $("#ivFoot").style.display="none";
-    setTimeout(()=>{
-      $("#ivBody").innerHTML+=`<div class="iv-done"><div class="v">${svg(I.check,34)}</div>
-        <h2>הפרופיל נוצר ✓</h2><p>${esc(w.name)} · ${esc(w.nationality)}</p></div>`;
-      $("#ivBody").scrollTop=$("#ivBody").scrollHeight;
-    },400);
+    setTimeout(()=>showInterviewUploads(w.id,w.name,w.nationality),400);
   });
+}
+function showInterviewDone(name,nationality){
+  $("#ivBody").innerHTML+=`<div class="iv-done"><div class="v">${svg(I.check,34)}</div>
+    <h2>הפרופיל נוצר ✓</h2><p>${esc(name)} · ${esc(nationality)}</p></div>`;
+  $("#ivBody").scrollTop=$("#ivBody").scrollHeight;
+}
+function showInterviewUploads(workerId,name,nationality){
+  const U=IV_UPLOAD_LABELS[ivState.lang]||IV_UPLOAD_LABELS["English"];
+  const fields=[["photo","image","photoInput"],["passport","image","passportInput"],["visa","image","visaInput"],["video","video","videoInput"]];
+  $("#ivBody").innerHTML+=`<div class="iv-uploads" id="ivUploads">
+    <h3 style="font-size:16px;margin-bottom:6px">${esc(U.title)}</h3>
+    <p style="font-size:12.5px;color:var(--ink-3,#6E8189);margin-bottom:14px;line-height:1.5">${esc(U.note)}</p>
+    ${fields.map(([key,accept])=>`
+      <div class="iv-upload-row" id="ivRow_${key}" style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <span style="flex:1;font-size:13.5px">${esc(U[key])}</span>
+        <span id="ivStatus_${key}" style="font-size:12px;color:var(--ink-3,#6E8189)"></span>
+        <input type="file" id="ivFile_${key}" accept="${accept==='video'?'video/*':'image/*'}" capture="environment" style="display:none">
+        <button class="big-btn" style="width:auto;height:38px;padding:0 16px;font-size:13px" onclick="document.getElementById('ivFile_${key}').click()">${svg(I.upload,15)}</button>
+      </div>`).join("")}
+    <button class="big-btn cool" id="ivUploadsDone" style="margin-top:6px">${esc(U.done)}</button>
+  </div>`;
+  fields.forEach(([key])=>{
+    $(`#ivFile_${key}`).onchange=async e=>{
+      const file=e.target.files[0]; if(!file)return;
+      $(`#ivStatus_${key}`).textContent=U.uploading;
+      try{
+        const res=await uploadToCloudinary(file);
+        const w=db.workers.find(x=>x.id===workerId);
+        if(w){ if(key==="photo")w.photo=res.secure_url; else if(key==="passport")w.passportPhoto=res.secure_url;
+          else if(key==="visa")w.visaPhoto=res.secure_url; else if(key==="video")w.video=res.secure_url; save(); }
+        $(`#ivStatus_${key}`).textContent=U.uploaded;
+      }catch(err){ $(`#ivStatus_${key}`).textContent=""; toast("שגיאה בהעלאה — נסו שוב","err"); console.warn(err); }
+    };
+  });
+  $("#ivUploadsDone").onclick=()=>{
+    $("#ivUploads").remove();
+    showInterviewDone(name,nationality);
+  };
+  $("#ivBody").scrollTop=$("#ivBody").scrollHeight;
 }
 function buildWorkerFromInterview(partial){ // sanitize AI/user output (spec)
   const a=ivState.answers;
   const yesNo=v=>/כן|yes|sí|si|\bda\b|\bha\b|oo|opo|بله|آره|አዎ|да/i.test(v||"")?"yes"
     :/לא|\bno\b|\bnu\b|yo'?q|hindi|نه|خیر|አይ|нет/i.test(v||"")?"no":"";
+  const genderOf=v=>/^\s*(זכר|male|man|erkak|мужчина|bărbat|lalaki|hombre|مرد|ወንድ)/i.test(v||"")?"male"
+    :/^\s*(נקבה|female|woman|ayol|женщина|femeie|babae|mujer|زن|ሴት)/i.test(v||"")?"female":"";
   const nameParts=clean(a.name||"מטפל/ת חדש/ה",60).split(" ");
   return {
     id:uid("wrk"),dateAdded:now(),status:"זמין",source:"ראיון AI",
     name:nameParts[0]||"", lastName:nameParts.slice(1).join(" ")||"",
-    nationality:clean(a.nationality,40), gender:"", age:"", birthDate:"", maritalStatus:"",
+    nationality:clean(a.nationality,40), gender:genderOf(a.gender), age:"", birthDate:"", maritalStatus:"",
     phone:"", city:"", street:"",
-    languages:ivState.lang==="עברית"?"עברית":clean(ivState.lang,40),
+    languages:clean(a.languages,200)||(ivState.lang==="עברית"?"עברית":clean(ivState.lang,40)),
     experience:cleanInt(a.experience,0,80),
     expectedSalary:cleanInt(a.salary,0,50000),
-    canHoist:yesNo(a.physical), canDiapers:yesNo(a.physical), knowsDementia:yesNo(a.dementia),
+    canHoist:yesNo(a.hoist), canDiapers:yesNo(a.diapers), knowsDementia:yesNo(a.dementia),
+    passport:clean(a.passport,40), arrivalDate:clean(a.arrivalDate,40), workHistory:clean(a.workHistory,1000),
+    salaryPast:cleanInt(a.salaryPast,0,50000), genderFlex:clean(a.genderFlex,300),
+    coupleHome:yesNo(a.coupleHome), region:clean(a.region,200), regionFlexible:"",
+    photo:"", passportPhoto:"", visaPhoto:"", video:"",
     notes:clean(`ניסיון עם קשישים: ${a.elderly||"—"}\nעבד בישראל: ${a.israel||"—"}\nלינה: ${a.live||"—"}\nחוזקות: ${a.strengths||"—"}\nוויזה: ${a.visa||"—"}`,1000),
     tags:["ראיון AI"], starred:false,
     activities:[{id:uid("a"),text:partial?"ראיון חלקי נשמר אוטומטית":"ראיון AI הושלם — פרופיל נוצר",by:"מאור (AI)",at:now()}],
@@ -2355,14 +2470,18 @@ async function callInterviewAI(messages,system){
 }
 function aiInterviewSystem(lang){
   return `אתה "מאור", מגייס חם ומקצועי בחברת "עוגן סיעוד". נהל עם המועמד/ת שיחה טבעית וזורמת בשפה: ${lang} — לא תשאול נוקשה של שאלה ואז תשובה.
-ההודעה הראשונה כבר שאלה את השם המלא. המטרה שלך לאסוף בהדרגה, מתוך שיחה אמיתית, את 11 הפרטים:
-שם מלא, מדינת מוצא, שנות ניסיון בטיפול, ניסיון עם קשישים, האם עבד/ה בישראל, נכונות ללינה בבית המטופל,
-ציפיית שכר חודשית בשקלים, ניסיון עם אלצהיימר/דמנציה, יכולת טיפול גופני (הרמה/חיתולים), חוזקות, וסטטוס ויזה.
+ההודעה הראשונה כבר שאלה את השם המלא. המטרה שלך לאסוף בהדרגה, מתוך שיחה אמיתית, את 21 הפרטים הבאים:
+שם מלא, מספר דרכון/תעודת זהות, מדינת מוצא, תאריך הגעה מדויק לישראל, מין (זכר/נקבה), העדפה/הגבלה לגבי מגדר המטופל/ת,
+שנות ניסיון בטיפול, פירוט מלא של מקומות עבודה קודמים (אצל מי, ומתי בדיוק התחיל/ה וסיים/ה בכל מקום), ניסיון עם קשישים,
+האם עבד/ה בישראל בעבר, נכונות ללינה בבית המטופל, ציפיית שכר חודשית בשקלים, שכר בעבודה הקודמת,
+ניסיון עם אלצהיימר/דמנציה, נכונות לעבודה עם מנוף, נכונות לטיפול אישי כולל חיתולים,
+נכונות לעבוד בבית שיש בו גם בן/בת זוג נוסף/ת של המטופל/ת, אזור עבודה מועדף וגמישות לאזורים נוספים,
+שפות שדובר/ת ורמת שליטה בכל אחת מ-1 עד 10, חוזקות, וסטטוס ויזה.
 קרא כל הודעה של המועמד/ת בעיון: אם סיפר/ה כמה דברים בבת אחת — קלוט את כולם ואל תשאל שוב על מה שכבר נענה.
 אם כתב/ה משהו מעניין, לא צפוי, או שאל/ה שאלה — הגב לזה ספציפית ובחום (לא רק "תודה, השאלה הבאה") לפני שתמשיך.
 שאל שאלה אחת בלבד בכל הודעה, ורק על פרט שעדיין חסר. כשכל הפרטים נאספו — כתוב משפט סיום ידידותי, ואז בשורה נפרדת המילה [DONE]
 ואחריה JSON תקין בלבד עם המפתחות:
-{"name","nationality","experience","elderly","israel","live","salary","dementia","physical","strengths","visa"}.`;
+{"name","passport","nationality","arrivalDate","gender","genderFlex","experience","workHistory","elderly","israel","live","salary","salaryPast","dementia","hoist","diapers","coupleHome","region","languages","strengths","visa"}.`;
 }
 async function aiLeadSummary(leadId){
   const l=leadById(leadId); if(!l)return;
