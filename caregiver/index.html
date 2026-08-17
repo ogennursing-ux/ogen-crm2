@@ -273,7 +273,7 @@ async function doLogin(){
   toast("מתחבר…");
   let d=null; try{const s=await cgDoc(id).get();d=s.exists?s.data():null;}catch(e){console.warn(e);}
   if(!d){ d={id,name:"",nationality:"",gender:"female",age:"",city:"",languages:"עברית",experience:"",expectedSalary:5800,
-    canHoist:"yes",canDiapers:"yes",knowsDementia:"no",status:"זמין",photo:"",video:"",phone:"",createdAt:nowT()};
+    canHoist:"yes",canDiapers:"yes",knowsDementia:"no",status:"זמין",photo:"",video:"",phone:"",email:"",createdAt:nowT()};
     try{await cgDoc(id).set(d);}catch(e){} }
   me=d; localStorage.setItem(SESS,id); enterApp();
 }
@@ -339,7 +339,10 @@ function renderProfile(){const tab=$("#tab");tab.className="tab";const w=me;
         <div class="field"><label>גיל</label><input id="f-age" type="number" value="${esc(w.age)}"></div>
         <div class="field"><label>עיר</label><select id="f-city"><option value="">—</option>${CITIES.map(c=>`<option ${w.city===c?"selected":""}>${c}</option>`).join("")}</select></div>
       </div>
-      <div class="field"><label>טלפון (וואטסאפ)</label><input id="f-phone" value="${esc(w.phone)}" placeholder="050-0000000"></div>
+      <div class="grid2">
+        <div class="field"><label>טלפון (וואטסאפ)</label><input id="f-phone" value="${esc(w.phone)}" placeholder="050-0000000" dir="ltr" style="text-align:right"></div>
+        <div class="field"><label>דוא"ל</label><input id="f-email" type="email" value="${esc(w.email||"")}" placeholder="name@example.com" dir="ltr" style="text-align:right"></div>
+      </div>
       <div class="field"><label>שפות</label><input id="f-lang" value="${esc(w.languages)}" placeholder="עברית, אנגלית…"></div>
       <div class="grid2">
         <div class="field"><label>שנות ניסיון</label><input id="f-exp" type="number" value="${esc(w.experience)}"></div>
@@ -441,7 +444,7 @@ let ynState={};
 function pickYN(k,v){ynState[k]=v;$$("#yn-"+k+" .opt").forEach(b=>b.classList.toggle("sel",b.dataset.v===v));}
 function saveProfile(){
   me.name=$("#f-name").value.trim(); me.nationality=$("#f-nat").value; me.gender=$("#f-gender").value;
-  me.age=$("#f-age").value; me.city=$("#f-city").value; me.phone=$("#f-phone").value.trim();
+  me.age=$("#f-age").value; me.city=$("#f-city").value; me.phone=$("#f-phone").value.trim(); me.email=$("#f-email").value.trim();
   me.languages=$("#f-lang").value.trim(); me.experience=$("#f-exp").value; me.expectedSalary=+$("#f-sal").value||0;
   me.canHoist=ynState.hoist||me.canHoist; me.canDiapers=ynState.diapers||me.canDiapers; me.knowsDementia=ynState.dementia||me.knowsDementia;
   me.about=($("#f-about")||{}).value||me.about||"";

@@ -251,21 +251,29 @@ img{display:block;max-width:100%}
     <div class="auth-head"><button class="back" onclick="go('welcome')">→</button><h2>הרשמה</h2></div>
     <div class="auth-body">
       <div class="intro">פותחים חשבון פעם אחת — וממשיכים מאיפה שהפסקתם, בכל כניסה.</div>
-      <div class="field"><label>שם מלא</label><input id="su-name" placeholder="למשל: מיכל כהן"></div>
+      <div class="field"><label>שם איש/אשת הקשר</label><input id="su-name" placeholder="למשל: מיכל כהן"></div>
       <div class="field"><label>תעודת זהות</label><input id="su-id" inputmode="numeric" placeholder="9 ספרות"></div>
       <div class="field"><label>טלפון</label><input id="su-phone" inputmode="tel" placeholder="050-0000000"></div>
+      <div class="field"><label>דוא"ל</label><input id="su-email" type="email" placeholder="name@example.com" dir="ltr" style="text-align:right"></div>
       <div class="field" id="aiFreetextBox" style="display:none;background:var(--like-soft);border-radius:16px;padding:14px">
         <label style="color:var(--like)">✨ ספרו לנו בחופשיות על מי שאתם מחפשים לו טיפול</label>
         <textarea id="su-freetext" placeholder="למשל: אנחנו מחפשים מטפלת לאמא שלנו בחיפה, יש לה אלצהיימר קל, התקציב שלנו בערך 6000 ש״ח, חשוב לנו שתדבר עברית"></textarea>
         <button class="big-btn" style="margin-top:10px;background:var(--like);color:#fff;box-shadow:none;height:44px" onclick="aiFillSignup()">מלא/י את הטופס בשבילי</button>
       </div>
       <div class="section-t">על מי מטפלים?</div>
+      <div class="field"><label>שם המטופל/ת</label><input id="su-patientName" placeholder="למשל: רבקה כהן"></div>
+      <div class="field"><label>מגדר המטופל/ת</label><div class="opts" id="su-patientGender"></div></div>
       <div class="field"><label>איזה מטפל/ת אתם מחפשים?</label><div class="opts" id="su-gender"></div></div>
       <div class="field"><label>עיר</label><select id="su-city"></select></div>
       <div class="field"><label>צרכי טיפול</label><div class="opts" id="su-needs"></div></div>
       <div class="field"><label>שפה מועדפת</label><div class="opts" id="su-lang"></div></div>
       <div class="field"><label>תקציב חודשי: <b id="su-budval" style="color:var(--anchor)">5,800 ₪</b></label>
         <input type="range" id="su-bud" min="4500" max="8000" step="100" value="5800" style="height:36px;accent-color:var(--anchor)"></div>
+      <div class="section-t">פרטים נוספים</div>
+      <div class="field"><label>יש מעשנים בבית?</label><div class="opts" id="su-smokers"></div></div>
+      <div class="field"><label>יש עוד אנשים שגרים בבית?</label><div class="opts" id="su-otherPeople"></div></div>
+      <div class="field"><label>יש היתר העסקה לעובד/ת זר/ה?</label><div class="opts" id="su-permit"></div></div>
+      <div class="field"><label>ההיתר בתוקף עד (אם יש)</label><input id="su-permitExpiry" placeholder="למשל: 03/2027"></div>
       <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--ink-2);margin:6px 0 2px;cursor:pointer">
         <input type="checkbox" id="su-consent" style="width:18px;height:18px;flex-shrink:0;margin-top:1px;accent-color:var(--anchor)">
         <span>קראתי ואני מסכים/ה ל<a href="javascript:void(0)" onclick="showPrivacyModal()" style="color:var(--anchor);text-decoration:underline">מדיניות הפרטיות</a></span>
@@ -462,10 +470,14 @@ function fillSignupForm(){
   $("#su-gender").innerHTML=[["female","מטפלת","👩"],["male","מטפל","👨"],["","לא משנה","✨"]].map(([v,l,e])=>chip(0,v,l,e)).join("");
   $("#su-needs").innerHTML=[["hoist","מנוף/הרמה","🛠️"],["diapers","טיפול אישי","🧴"],["dementia","דמנציה","🧠"]].map(([v,l,e])=>`<button class="opt" data-need="${v}">${e} ${l}</button>`).join("");
   $("#su-lang").innerHTML=["עברית","אנגלית","רוסית"].map(l=>`<button class="opt" data-lang="${l}">${l}</button>`).concat(`<button class="opt sel" data-lang="">לא משנה</button>`).join("");
+  $("#su-patientGender").innerHTML=[["female","נקבה"],["male","זכר"]].map(([v,l])=>chip(0,v,l)).join("");
+  $("#su-smokers").innerHTML=[["yes","כן"],["no","לא"]].map(([v,l])=>chip(0,v,l)).join("");
+  $("#su-otherPeople").innerHTML=[["yes","כן"],["no","לא"]].map(([v,l])=>chip(0,v,l)).join("");
+  $("#su-permit").innerHTML=[["yes","כן"],["no","לא"]].map(([v,l])=>chip(0,v,l)).join("");
   $("#su-city").innerHTML=`<option value="">בחרו עיר…</option>`+CITIES.map(c=>`<option>${c}</option>`).join("");
   // single-select groups
   const single=(sel,attr)=>$$(sel+" .opt").forEach(b=>b.onclick=()=>{$$(sel+" .opt").forEach(x=>x.classList.remove("sel"));b.classList.add("sel");});
-  single("#su-gender");single("#su-lang");
+  single("#su-gender");single("#su-lang");single("#su-patientGender");single("#su-smokers");single("#su-otherPeople");single("#su-permit");
   $$("#su-needs .opt").forEach(b=>b.onclick=()=>b.classList.toggle("sel")); // multi
   $("#su-bud").oninput=e=>$("#su-budval").textContent=(+e.target.value).toLocaleString("he-IL")+" ₪";
   // default select gender "no matter"
@@ -504,10 +516,16 @@ async function doSignup(){
   const gender=($("#su-gender .opt.sel")||{}).dataset?.v||"";
   const needs=$$("#su-needs .opt.sel").map(b=>b.dataset.need);
   const lang=($("#su-lang .opt.sel")||{}).dataset?.lang||"";
+  const patientGender=($("#su-patientGender .opt.sel")||{}).dataset?.v||"";
+  const smokers=($("#su-smokers .opt.sel")||{}).dataset?.v||"";
+  const otherPeople=($("#su-otherPeople .opt.sel")||{}).dataset?.v||"";
+  const hasPermit=($("#su-permit .opt.sel")||{}).dataset?.v||"";
   users[id]={
-    id,name,phone:$("#su-phone").value.trim(),city:$("#su-city").value,
+    id,name,phone:$("#su-phone").value.trim(),email:$("#su-email").value.trim(),city:$("#su-city").value,
     family:{gender,city:$("#su-city").value,requirements:lang,offeredSalary:+$("#su-bud").value,
-      needsHoist:needs.includes("hoist")?"yes":"no",needsDiapers:needs.includes("diapers")?"yes":"no",hasDementia:needs.includes("dementia")?"yes":"no"},
+      needsHoist:needs.includes("hoist")?"yes":"no",needsDiapers:needs.includes("diapers")?"yes":"no",hasDementia:needs.includes("dementia")?"yes":"no",
+      patientName:$("#su-patientName").value.trim(),patientGender,smokersHome:smokers,otherPeopleHome:otherPeople,
+      hasPermit,permitExpiry:$("#su-permitExpiry").value.trim()},
     seen:[],liked:[],passed:[],matches:[],chats:{},createdAt:now()
   };
   saveUsers(); localStorage.setItem(SESS_KEY,id); me=users[id];

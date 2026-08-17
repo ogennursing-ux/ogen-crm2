@@ -1509,7 +1509,7 @@ function renderHiburListBody(){
   box.innerHTML=`<table class="tbl"><thead><tr>
       <th>שם</th><th>עיר</th><th>טלפון</th>${view==="cg"?"<th>לאום</th><th>ניסיון</th><th>סטטוס</th><th>Trust Score</th>":"<th>תקציב</th><th>נרשמ/ה</th>"}
     </tr></thead><tbody>
-    ${rows.map(r=>view==="fam"?`<tr>
+    ${rows.map(r=>view==="fam"?`<tr style="cursor:pointer" onclick="openFamilyDetail('${esc(r._id)}')">
         <td><b>${esc(r.name||"—")}</b></td><td>${esc(r.city||"—")}</td><td dir="ltr" style="text-align:right">${esc(r.phone||"—")}</td>
         <td>${money((r.family&&r.family.offeredSalary)||0)}</td><td>${fmtDate(r.createdAt?new Date(r.createdAt).toISOString():"")}</td>
       </tr>`:`<tr>
@@ -1519,6 +1519,33 @@ function renderHiburListBody(){
         <td>${trustScoreBadge(r)}</td>
       </tr>`).join("")}
   </tbody></table>`;
+}
+function openFamilyDetail(id){
+  const r=hiburFamCache.find(x=>x._id===id); if(!r)return;
+  const f=r.family||{};
+  const yn2=v=>v==="yes"?"כן":v==="no"?"לא":"—";
+  const row=(l,v)=>`<div class="field"><label>${l}</label><div style="padding:8px 0;font-size:14px">${v||"—"}</div></div>`;
+  openModal({
+    title:esc(r.name||"משפחה"), icon:I.workers,
+    body:`<div>
+      ${row("איש/אשת קשר",esc(r.name))}
+      ${row("שם המטופל/ת",esc(f.patientName))}
+      ${row("מגדר המטופל/ת",f.patientGender==="female"?"נקבה":f.patientGender==="male"?"זכר":"—")}
+      ${row("טלפון",esc(r.phone))}
+      ${row('דוא"ל',esc(r.email))}
+      ${row("עיר",esc(r.city))}
+      ${row("מטפל/ת מבוקש/ת",f.gender==="female"?"מטפלת":f.gender==="male"?"מטפל":"לא משנה")}
+      ${row("צרכים",[f.needsHoist==="yes"?"מנוף":"",f.needsDiapers==="yes"?"טיפול אישי":"",f.hasDementia==="yes"?"דמנציה":""].filter(Boolean).join(", ")||"—")}
+      ${row("שפה מועדפת",esc(f.requirements))}
+      ${row("תקציב",money(f.offeredSalary||0))}
+      ${row("מעשנים בבית",yn2(f.smokersHome))}
+      ${row("עוד אנשים בבית",yn2(f.otherPeopleHome))}
+      ${row("היתר העסקה",yn2(f.hasPermit))}
+      ${row("תוקף ההיתר",esc(f.permitExpiry))}
+      ${row("נרשמ/ה",fmtDate(r.createdAt?new Date(r.createdAt).toISOString():""))}
+    </div>`,
+    footer:`<button class="btn ghost" onclick="closeModal()">סגור</button>`
+  });
 }
 function computeTrustScore(w){
   let s=0;
