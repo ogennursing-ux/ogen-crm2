@@ -12,6 +12,7 @@
 <!-- cloud accounts (cross-device) via Firebase; degrades gracefully to on-device if unavailable -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <style>
 /* ============================================================
    חיבור בקליק 2.0 — a real app: accounts, discover, profiles, chat
@@ -505,14 +506,28 @@ async function aiFillSignup(){
     toast("הטופס מולא — אפשר לתקן ידנית ולהמשיך ✓");
   }catch(e){toast("שגיאה — נסו למלא ידנית");console.warn(e);}
 }
+const AUTH_FAMILY_URL="https://hibur-wa-bridge.netlify.app/.netlify/functions/auth-family";
+async function signInFamily(id,name,mode){
+  const r=await fetch(AUTH_FAMILY_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,name,mode})});
+  const data=await r.json();
+  if(data.token) await firebase.auth().signInWithCustomToken(data.token);
+  return data;
+}
 async function doSignup(){
   const name=$("#su-name").value.trim(), id=$("#su-id").value.replace(/\D/g,"");
   if(name.length<2){toast("הזינו שם מלא");return;}
   if(id.length<5){toast("הזינו תעודת זהות תקינה");return;}
   if(!$("#su-city").value){toast("בחרו עיר");return;}
   if(!$("#su-consent").checked){toast("יש לאשר את מדיניות הפרטיות כדי להמשיך");return;}
-  const existing=users[id]||await fetchCloud(id);
-  if(existing){toast("כבר קיים חשבון עם ת\"ז זו — היכנסו");go("login");return;}
+  toast("בודק/ת…");
+  let auth; try{ auth=await signInFamily(id,name,"signup"); }catch(e){toast("שגיאת רשת — נסו שוב");console.warn(e);return;}
+  if(auth.error==="name-mismatch"){toast("קיים כבר חשבון אחר עם ת\"ז זו");return;}
+  if(!auth.token){toast("שגיאה — נסו שוב");return;}
+  if(!auth.isNew){
+    // account already existed with a matching name — sign them in rather than overwrite it
+    const existing=await fetchCloud(id);
+    if(existing){users[id]=existing;saveUsersLocal();me=existing;enterApp();return;}
+  }
   const gender=($("#su-gender .opt.sel")||{}).dataset?.v||"";
   const needs=$$("#su-needs .opt.sel").map(b=>b.dataset.need);
   const lang=($("#su-lang .opt.sel")||{}).dataset?.lang||"";
@@ -534,13 +549,17 @@ async function doSignup(){
 async function doLogin(){
   const name=$("#li-name").value.trim(), id=$("#li-id").value.replace(/\D/g,"");
   if(!name||id.length<5){toast("מלאו שם ותעודת זהות");return;}
-  let u=users[id];
-  if(!u){ toast("בודק…"); u=await fetchCloud(id); if(u){users[id]=u;saveUsersLocal();} }
+  toast("בודק/ת…");
+  let auth; try{ auth=await signInFamily(id,name,"login"); }catch(e){toast("שגיאת רשת — נסו שוב");console.warn(e);return;}
+  if(auth.error==="not-found"){toast("לא נמצא חשבון — בדקו ת\"ז או הירשמו");return;}
+  if(auth.error==="name-mismatch"){toast("השם אינו תואם לתעודת הזהות");return;}
+  if(!auth.token){toast("שגיאה — נסו שוב");return;}
+  let u=users[id]||await fetchCloud(id);
   if(!u){toast("לא נמצא חשבון — בדקו ת\"ז או הירשמו");return;}
-  if((u.name||"").trim()!==name){toast("השם אינו תואם לתעודת הזהות");return;}
+  users[id]=u; saveUsersLocal();
   localStorage.setItem(SESS_KEY,id); me=u; enterApp();
 }
-function logout(){localStorage.removeItem(SESS_KEY);me=null;go("welcome");}
+function logout(){localStorage.removeItem(SESS_KEY);me=null;try{firebase.auth().signOut();}catch(e){}go("welcome");}
 
 /* ============================================================
    APP SHELL

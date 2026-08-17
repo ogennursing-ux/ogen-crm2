@@ -12,6 +12,7 @@
 <!-- production-parity integrations: Firebase sync, Excel (loaded from CDN, per spec) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 /* ============================================================
@@ -2609,13 +2610,25 @@ function initLock(){
   inp.onkeydown=e=>{if(e.key==="Enter")checkPin();};
   sel.focus();
 }
-function checkPin(){
+const AUTH_STAFF_URL="https://hibur-wa-bridge.netlify.app/.netlify/functions/auth-staff";
+async function checkPin(){
   if(locked)return;
-  const sel=$("#loginName"), inp=$("#pinInput");
+  const sel=$("#loginName"), inp=$("#pinInput"), go=$("#pinGo");
   const staffId=sel.value, val=inp.value;
   if(!staffId||!val)return;
-  const su=db.staff.find(s=>s.id===staffId&&s.code&&s.code===val);
-  if(su){localStorage.setItem("ogenUser",su.name);unlock();}
+  go.disabled=true; $("#lockMsg").textContent="בודק/ת…";
+  let ok=false;
+  try{
+    const r=await fetch(AUTH_STAFF_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({staffId,code:val})});
+    const data=await r.json();
+    if(data.token){
+      await firebase.auth().signInWithCustomToken(data.token);
+      localStorage.setItem("ogenUser",data.name||"");
+      ok=true;
+    }
+  }catch(e){console.warn("auth-staff",e);}
+  go.disabled=false; $("#lockMsg").textContent="";
+  if(ok){unlock();}
   else{
     attempts++; inp.value=""; inp.classList.add("shake");
     setTimeout(()=>inp.classList.remove("shake"),450);
@@ -2654,6 +2667,7 @@ function init(){
   const params=new URLSearchParams(location.search);
   if(params.get("mode")==="interview"){ $("#lock").classList.add("hidden"); launchInterview(); return; }
   seed();
+  try{ if(typeof firebase!=="undefined" && !firebase.apps.length) firebase.initializeApp(firebaseConfig); }catch(e){console.warn("fb init",e);}
   initLock();
 }
 init();

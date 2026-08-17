@@ -10,6 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <style>
 :root{--sea-950:#0A2733;--anchor:#0D4F5C;--sea-500:#2E8CA0;--sea-400:#4FA8BC;--mist:#EEF3F4;--paper:#fff;--sand:#E9B44C;
   --like:#12A594;--like-soft:#D6F1ED;--nope:#E5563E;--ink:#12242E;--ink-2:#41565F;--ink-3:#6E8189;--line:#E4ECED;
@@ -264,6 +265,7 @@ function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("on");clea
 function go(id){$$(".screen").forEach(s=>s.classList.remove("on"));const el=$("#"+id);el.classList.add("on");el.classList.add("fade");setTimeout(()=>el.classList.remove("fade"),260);}
 
 /* ---------- login ---------- */
+const AUTH_CAREGIVER_URL="https://hibur-wa-bridge.netlify.app/.netlify/functions/auth-caregiver";
 async function doLogin(){
   const id=$("#li-id").value.trim().replace(/\s/g,"");
   if(id.length<4){toast("הזינו ת״ז או דרכון");return;}
@@ -271,13 +273,19 @@ async function doLogin(){
   localStorage.setItem("hbcg_consent","1");
   if(!fdb){toast("אין חיבור לרשת");return;}
   toast("מתחבר…");
+  let auth; try{
+    const r=await fetch(AUTH_CAREGIVER_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id})});
+    auth=await r.json();
+    if(auth.token) await firebase.auth().signInWithCustomToken(auth.token);
+  }catch(e){toast("שגיאת רשת — נסו שוב");console.warn(e);return;}
+  if(!auth.token){toast("שגיאה — נסו שוב");return;}
   let d=null; try{const s=await cgDoc(id).get();d=s.exists?s.data():null;}catch(e){console.warn(e);}
   if(!d){ d={id,name:"",nationality:"",gender:"female",age:"",city:"",languages:"עברית",experience:"",expectedSalary:5800,
     canHoist:"yes",canDiapers:"yes",knowsDementia:"no",status:"זמין",photo:"",video:"",phone:"",email:"",createdAt:nowT()};
     try{await cgDoc(id).set(d);}catch(e){} }
   me=d; localStorage.setItem(SESS,id); enterApp();
 }
-function logout(){localStorage.removeItem(SESS);if(connUnsub)connUnsub();me=null;go("welcome");}
+function logout(){localStorage.removeItem(SESS);if(connUnsub)connUnsub();me=null;try{firebase.auth().signOut();}catch(e){}go("welcome");}
 function saveMe(){if(!fdb||!me)return;try{cgDoc(me.id).set(JSON.parse(JSON.stringify(me)),{merge:true});}catch(e){}}
 
 /* ---------- app shell ---------- */
