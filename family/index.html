@@ -779,7 +779,7 @@ function familyLike(w){
 async function fetchCloudCaregivers(){
   if(!fdb)return [];
   try{const s=await fdb.collection("hibur_cg").get();
-    return s.docs.map(d=>d.data()).filter(w=>w.name).map((w,i)=>enrich(w,100+i));
+    return s.docs.map(d=>d.data()).filter(w=>w.name&&!w.archived).map((w,i)=>enrich(w,100+i));
   }catch(e){console.warn("cg fetch",e);return [];}
 }
 function showMatchModal(w){

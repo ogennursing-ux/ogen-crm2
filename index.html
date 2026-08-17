@@ -1016,6 +1016,7 @@ function openLead(id){
       : `<button class="btn danger sm" onclick="delItem('lead','${l.id}')">${svg(I.trash,15)}מחק</button>
          <div class="spacer"></div>
          ${hasAI()?`<button class="btn sm" onclick="aiLeadSummary('${l.id}')">${svg(I.brain,15)}סיכום AI</button>`:""}
+         ${l.contactPhone?`<button class="btn sm" onclick="sendWaQuestionnaire('family','${esc(l.contactPhone)}')">${svg(I.chat,15)}שלח שאלון בווטסאפ</button>`:""}
          <button class="btn" onclick="startMatch('${l.id}')">${svg(I.match,16)}מצא התאמות</button>
          <button class="btn primary" id="saveLead">${svg(I.check,16)}שמור</button>`,
     onMount
@@ -1184,6 +1185,7 @@ function openWorker(id){
       ?`<button class="btn ghost" onclick="closeModal()">ביטול</button><div class="spacer"></div><button class="btn primary" id="saveW">${svg(I.check,16)}צור</button>`
       :`<button class="btn danger sm" onclick="delItem('worker','${w.id}')">${svg(I.trash,15)}מחק</button><div class="spacer"></div>
         ${w.phone?`<a class="btn sm" href="https://wa.me/${w.phone.replace(/\D/g,"").replace(/^0/,"972")}" target="_blank">${svg(I.chat,15)}וואטסאפ</a>`:""}
+        ${w.phone?`<button class="btn sm" onclick="sendWaQuestionnaire('caregiver','${esc(w.phone)}')">${svg(I.chat,15)}שלח שאלון בווטסאפ</button>`:""}
         <button class="btn primary" id="saveW">${svg(I.check,16)}שמור</button>`,
     onMount
   });
@@ -2611,6 +2613,20 @@ function initLock(){
   sel.focus();
 }
 const AUTH_STAFF_URL="https://hibur-wa-bridge.netlify.app/.netlify/functions/auth-staff";
+const WA_START_FLOW_URL="https://hibur-wa-bridge.netlify.app/.netlify/functions/wa-start-flow";
+async function sendWaQuestionnaire(flow,phone){
+  if(!phone){toast("אין מספר טלפון","err");return;}
+  try{
+    const idToken=await firebase.auth().currentUser.getIdToken();
+    toast("שולח שאלון בווטסאפ…");
+    const r=await fetch(WA_START_FLOW_URL,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({idToken,phone,flow})});
+    const data=await r.json();
+    if(data.ok)toast("השאלון נשלח בווטסאפ ✓","ok");
+    else if(data.error==="not-staff")toast("רק אנשי צוות יכולים לשלוח שאלון","err");
+    else toast(data.sent&&data.sent.skipped?"הבוט עדיין לא מוגדר (ממתין לאימות Meta)":"שגיאה בשליחה","err");
+  }catch(e){console.warn("sendWaQuestionnaire",e);toast("שגיאת רשת","err");}
+}
 async function checkPin(){
   if(locked)return;
   const sel=$("#loginName"), inp=$("#pinInput"), go=$("#pinGo");
