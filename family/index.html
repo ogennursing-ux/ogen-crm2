@@ -266,6 +266,10 @@ img{display:block;max-width:100%}
       <div class="field"><label>שפה מועדפת</label><div class="opts" id="su-lang"></div></div>
       <div class="field"><label>תקציב חודשי: <b id="su-budval" style="color:var(--anchor)">5,800 ₪</b></label>
         <input type="range" id="su-bud" min="4500" max="8000" step="100" value="5800" style="height:36px;accent-color:var(--anchor)"></div>
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--ink-2);margin:6px 0 2px;cursor:pointer">
+        <input type="checkbox" id="su-consent" style="width:18px;height:18px;flex-shrink:0;margin-top:1px;accent-color:var(--anchor)">
+        <span>קראתי ואני מסכים/ה ל<a href="javascript:void(0)" onclick="showPrivacyModal()" style="color:var(--anchor);text-decoration:underline">מדיניות הפרטיות</a></span>
+      </label>
       <button class="big-btn cool" style="margin-top:8px" onclick="doSignup()">יצירת חשבון ומעבר להתאמות ♥</button>
     </div>
   </section>
@@ -397,6 +401,35 @@ const pctOf=s=>Math.min(100,Math.round(s/1.8));
 /* ============================================================
    STATE + ACCOUNTS (localStorage; cloud sync = next phase)
    ============================================================ */
+const PRIVACY_HTML=`
+  <p><b>עדכון אחרון: אוגוסט 2026</b></p>
+  <p>"חיבור בקליק" היא פלטפורמת התאמה בין משפחות למטפלים/ות סיעודיים, המופעלת על ידי עוגן סיעוד ועובדים זרים בע"מ ("עוגן", "אנחנו"). מסמך זה מסביר איזה מידע נאסף, לשם מה, ומי רואה אותו.</p>
+  <p><b>1. מידע שנאסף</b><br>
+  ממשפחות: שם מלא, תעודת זהות, טלפון, עיר, פרטי הצרכים הטיפוליים של המטופל/ת (כולל מידע רגיש כגון ניידות ודמנציה), תקציב.<br>
+  ממטפלים/ות: שם מלא, מספר תעודת זהות/דרכון, טלפון, עיר, מדינת מוצא, ניסיון, שכר מבוקש, תמונה, סרטון היכרות, סריקת דרכון/ויזה, תיאור אישי חופשי.<br>
+  משני הצדדים: תוכן שיחות בתוך האפליקציה, במידה ומגיעים להתאמה.</p>
+  <p><b>2. למה נאסף המידע</b><br>
+  כדי להתאים בין משפחות למטפלים/ות באופן המדויק ביותר, לאפשר תקשורת ביניכם, ולסייע לרכזי/ות ההשמה של עוגן בליווי התהליך.</p>
+  <p><b>3. מי רואה את המידע</b><br>
+  צוות עוגן המורשה (רכזי/ות השמה) · הצד השני בתהליך ההתאמה, רק לאחר עניין הדדי ובכפוף להגדרות האישור הקיימות · ספקי שירות טכניים הפועלים מטעמנו לתפעול המערכת בלבד — Google Firebase (אחסון נתונים), Cloudinary (אחסון תמונות/סרטונים), Google Gemini (תכונות בינה מלאכותית כגון ניסוח וטרגום), Meta/WhatsApp (אם וכאשר תופעל תקשורת דרך וואטסאפ). ספקים אלו אינם עושים שימוש עצמאי במידע.</p>
+  <p><b>4. שמירה ומחיקה</b><br>
+  המידע נשמר כל עוד החשבון פעיל. ניתן לבקש עיון, תיקון או מחיקה של המידע דרך פרטי הקשר שלמטה.</p>
+  <p><b>5. אבטחת מידע</b><br>
+  אנו נוקטים אמצעים סבירים להגנה על המידע — הרשאות גישה מוגבלות והצפנת תעבורה. אין אפשרות להבטיח הגנה מוחלטת מפני כל פגיעה.</p>
+  <p><b>6. הזכויות שלכם</b><br>
+  בהתאם לחוק הגנת הפרטיות, התשמ"א-1981 (כולל תיקון 13), עומדת לכם הזכות לעיין במידע שנאסף עליכם, לבקש את תיקונו או מחיקתו, ולהתנגד לשימושים מסוימים בו.</p>
+  <p><b>7. הסכמה</b><br>
+  בסימון התיבה בעת ההרשמה אתם מאשרים שקראתם והבנתם מדיניות זו ומסכימים לאיסוף ולשימוש במידע כמתואר לעיל.</p>
+  <p><b>8. יצירת קשר</b><br>
+  לכל שאלה או בקשה בנושא פרטיות: ogen.nursing@gmail.com</p>
+`;
+function showPrivacyModal(){
+  $("#modalRoot").innerHTML=`<div class="scrim" onclick="if(event.target===this)this.remove()"><div class="modal" style="max-width:520px;text-align:right;max-height:80vh;overflow-y:auto">
+    <h3 style="margin-bottom:14px;text-align:center">מדיניות פרטיות</h3>
+    <div style="font-size:13.5px;color:var(--ink-2);line-height:1.7">${PRIVACY_HTML}</div>
+    <button class="big-btn cool" style="margin-top:14px" onclick="$('#modalRoot').innerHTML=''">סגור</button>
+  </div></div>`;
+}
 const DB_KEY="hb_users", SESS_KEY="hb_session";
 let users={}, me=null, caregivers=[], deck=[], deckIdx=0, curTab="discover", detailId=null, chatId=null;
 function loadUsers(){try{users=JSON.parse(localStorage.getItem(DB_KEY)||"{}");}catch(e){users={};}}
@@ -465,6 +498,7 @@ async function doSignup(){
   if(name.length<2){toast("הזינו שם מלא");return;}
   if(id.length<5){toast("הזינו תעודת זהות תקינה");return;}
   if(!$("#su-city").value){toast("בחרו עיר");return;}
+  if(!$("#su-consent").checked){toast("יש לאשר את מדיניות הפרטיות כדי להמשיך");return;}
   const existing=users[id]||await fetchCloud(id);
   if(existing){toast("כבר קיים חשבון עם ת\"ז זו — היכנסו");go("login");return;}
   const gender=($("#su-gender .opt.sel")||{}).dataset?.v||"";

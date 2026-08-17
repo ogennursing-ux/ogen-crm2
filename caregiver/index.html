@@ -119,6 +119,10 @@ img{display:block;max-width:100%}
     <p>היכנס/י עם מספר תעודת זהות או דרכון — וראה/י אילו משפחות מעוניינות בך.</p>
     <div class="login-box">
       <div class="field"><input id="li-id" inputmode="text" placeholder="ת״ז / מספר דרכון"></div>
+      <label id="consentRow" style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:rgba(255,255,255,.85);margin:6px 0 12px;cursor:pointer">
+        <input type="checkbox" id="li-consent" style="width:18px;height:18px;flex-shrink:0;margin-top:1px;accent-color:var(--sand)">
+        <span>קראתי ואני מסכים/ה ל<a href="javascript:void(0)" onclick="showPrivacyModal()" style="color:var(--sand);text-decoration:underline">מדיניות הפרטיות</a></span>
+      </label>
       <button class="big-btn" onclick="doLogin()">כניסה / הרשמה</button>
     </div>
   </section>
@@ -226,6 +230,35 @@ const blobToB64=blob=>new Promise((res,rej)=>{const rd=new FileReader();rd.onloa
 
 /* ---------- state ---------- */
 let me=null, curTab="profile", conns=[], connUnsub=null, chatConn=null;
+const PRIVACY_HTML=`
+  <p><b>עדכון אחרון: אוגוסט 2026</b></p>
+  <p>"חיבור בקליק" היא פלטפורמת התאמה בין משפחות למטפלים/ות סיעודיים, המופעלת על ידי עוגן סיעוד ועובדים זרים בע"מ ("עוגן", "אנחנו"). מסמך זה מסביר איזה מידע נאסף, לשם מה, ומי רואה אותו.</p>
+  <p><b>1. מידע שנאסף</b><br>
+  ממשפחות: שם מלא, תעודת זהות, טלפון, עיר, פרטי הצרכים הטיפוליים של המטופל/ת (כולל מידע רגיש כגון ניידות ודמנציה), תקציב.<br>
+  ממטפלים/ות: שם מלא, מספר תעודת זהות/דרכון, טלפון, עיר, מדינת מוצא, ניסיון, שכר מבוקש, תמונה, סרטון היכרות, סריקת דרכון/ויזה, תיאור אישי חופשי.<br>
+  משני הצדדים: תוכן שיחות בתוך האפליקציה, במידה ומגיעים להתאמה.</p>
+  <p><b>2. למה נאסף המידע</b><br>
+  כדי להתאים בין משפחות למטפלים/ות באופן המדויק ביותר, לאפשר תקשורת ביניכם, ולסייע לרכזי/ות ההשמה של עוגן בליווי התהליך.</p>
+  <p><b>3. מי רואה את המידע</b><br>
+  צוות עוגן המורשה (רכזי/ות השמה) · הצד השני בתהליך ההתאמה, רק לאחר עניין הדדי ובכפוף להגדרות האישור הקיימות · ספקי שירות טכניים הפועלים מטעמנו לתפעול המערכת בלבד — Google Firebase (אחסון נתונים), Cloudinary (אחסון תמונות/סרטונים), Google Gemini (תכונות בינה מלאכותית כגון ניסוח וטרגום), Meta/WhatsApp (אם וכאשר תופעל תקשורת דרך וואטסאפ). ספקים אלו אינם עושים שימוש עצמאי במידע.</p>
+  <p><b>4. שמירה ומחיקה</b><br>
+  המידע נשמר כל עוד החשבון פעיל. ניתן לבקש עיון, תיקון או מחיקה של המידע דרך פרטי הקשר שלמטה.</p>
+  <p><b>5. אבטחת מידע</b><br>
+  אנו נוקטים אמצעים סבירים להגנה על המידע — הרשאות גישה מוגבלות והצפנת תעבורה. אין אפשרות להבטיח הגנה מוחלטת מפני כל פגיעה.</p>
+  <p><b>6. הזכויות שלכם</b><br>
+  בהתאם לחוק הגנת הפרטיות, התשמ"א-1981 (כולל תיקון 13), עומדת לכם הזכות לעיין במידע שנאסף עליכם, לבקש את תיקונו או מחיקתו, ולהתנגד לשימושים מסוימים בו.</p>
+  <p><b>7. הסכמה</b><br>
+  בסימון התיבה בעת ההרשמה אתם מאשרים שקראתם והבנתם מדיניות זו ומסכימים לאיסוף ולשימוש במידע כמתואר לעיל.</p>
+  <p><b>8. יצירת קשר</b><br>
+  לכל שאלה או בקשה בנושא פרטיות: ogen.nursing@gmail.com</p>
+`;
+function showPrivacyModal(){
+  $("#modalRoot").innerHTML=`<div class="scrim" onclick="if(event.target===this)this.remove()"><div class="modal" style="max-width:480px;text-align:right;max-height:80vh;overflow-y:auto">
+    <h3 style="margin-bottom:14px;text-align:center">מדיניות פרטיות</h3>
+    <div style="font-size:13.5px;color:var(--ink-2);line-height:1.7">${PRIVACY_HTML}</div>
+    <button class="big-btn cool" style="margin-top:14px" onclick="$('#modalRoot').innerHTML=''">סגור</button>
+  </div></div>`;
+}
 const SESS="hbcg_session";
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("on");clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove("on"),2000);}
 function go(id){$$(".screen").forEach(s=>s.classList.remove("on"));const el=$("#"+id);el.classList.add("on");el.classList.add("fade");setTimeout(()=>el.classList.remove("fade"),260);}
@@ -234,6 +267,8 @@ function go(id){$$(".screen").forEach(s=>s.classList.remove("on"));const el=$("#
 async function doLogin(){
   const id=$("#li-id").value.trim().replace(/\s/g,"");
   if(id.length<4){toast("הזינו ת״ז או דרכון");return;}
+  if(!$("#li-consent").checked){toast("יש לאשר את מדיניות הפרטיות כדי להמשיך");return;}
+  localStorage.setItem("hbcg_consent","1");
   if(!fdb){toast("אין חיבור לרשת");return;}
   toast("מתחבר…");
   let d=null; try{const s=await cgDoc(id).get();d=s.exists?s.data():null;}catch(e){console.warn(e);}
@@ -532,6 +567,7 @@ async function sendMsg(){const inp=$("#ctInput");const t=inp.value.trim();if(!t|
 
 /* ---------- boot ---------- */
 async function init(){
+  if(localStorage.getItem("hbcg_consent")==="1"){const c=$("#li-consent");if(c)c.checked=true;}
   const sid=localStorage.getItem(SESS);
   if(sid&&fdb){ try{const s=await cgDoc(sid).get();if(s.exists){me=s.data();enterApp();return;}}catch(e){} }
   go("welcome");
