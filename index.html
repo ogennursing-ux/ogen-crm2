@@ -1202,6 +1202,7 @@ function newWorker(){return{id:uid("wrk"),dateAdded:now(),status:"זמין",sour
   gender:"",age:"",birthDate:"",maritalStatus:"",phone:"",city:"",street:"",languages:"",experience:"",expectedSalary:"",
   canHoist:"",canDiapers:"",knowsDementia:"",notes:"",tags:[],starred:false,activities:[],_deleted:false,interview:null,
   passport:"",arrivalDate:"",workHistory:"",salaryPast:"",genderFlex:"",coupleHome:"",region:"",regionFlexible:"",
+  license:"",smoking:"",smokingHome:"",
   photo:"",passportPhoto:"",visaPhoto:"",video:""};}
 function workerForm(w){
   return `<form id="workerForm">
@@ -1245,9 +1246,14 @@ function workerForm(w){
     <div class="grid3">
       <div class="field"><label>אזור מועדף</label><input name="region" value="${esc(w.region)}" placeholder="מרכז / צפון / דרום…"></div>
       <div class="field"><label>גמיש/ה לאזורים נוספים</label>${yn("regionFlexible",w.regionFlexible)}</div>
-      <div class="field"><label>גמיש/ה למגדר המטופל/ת</label>${yn("genderFlex",w.genderFlex)}</div>
+      <div class="field"><label>העדפה/הגבלה למגדר המטופל/ת</label><input name="genderFlex" value="${esc(w.genderFlex)}"></div>
     </div>
-    <div class="field"><label>מוכן/ה לעבוד כשיש בן/בת זוג נוסף/ת בבית</label>${yn("coupleHome",w.coupleHome)}</div>
+    <div class="grid3">
+      <div class="field"><label>מוכן/ה לעבוד עם בן/בת זוג נוסף/ת בבית</label>${yn("coupleHome",w.coupleHome)}</div>
+      <div class="field"><label>רישיון נהיגה</label>${yn("license",w.license)}</div>
+      <div class="field"><label>מעשן/ת</label>${yn("smoking",w.smoking)}</div>
+    </div>
+    <div class="field"><label>בעיה לעבוד בבית מעשנים</label>${yn("smokingHome",w.smokingHome)}</div>
     <div class="grid3">
       <div class="field"><label>סטטוס</label><select name="status">${WORK_ST.map(s=>`<option ${w.status===s?"selected":""}>${s}</option>`).join("")}</select></div>
       <div class="field"><label>מקור</label><input name="source" value="${esc(w.source)}"></div>
@@ -1266,7 +1272,8 @@ function workerForm(w){
 function collectWorker(w){
   const f=$("#workerForm");if(!f)return;const g=n=>f.elements[n]?f.elements[n].value:w[n];
   ["name","lastName","nationality","gender","phone","city","street","languages","canHoist","canDiapers","knowsDementia",
-   "status","source","notes","passport","arrivalDate","workHistory","region","regionFlexible","genderFlex","coupleHome"]
+   "status","source","notes","passport","arrivalDate","workHistory","region","regionFlexible","genderFlex","coupleHome",
+   "license","smoking","smokingHome"]
    .forEach(n=>w[n]=clean(g(n),n==="notes"||n==="workHistory"?1000:120));
   w.age=cleanInt(g("age"),0,99); w.experience=cleanInt(g("experience"),0,80); w.expectedSalary=cleanInt(g("expectedSalary"),0,50000);
   w.salaryPast=cleanInt(g("salaryPast"),0,50000);
@@ -2216,6 +2223,9 @@ const IV_QUESTIONS=[ // 21 info points, translated into all 9 languages
   {key:"hoist",q:{he:"את/ה מוכן/ה לעבוד עם מנוף להרמת המטופל/ת? (כן/לא)",en:"Are you willing to work with a hoist for lifting the patient? (yes/no)",uz:"Bemorni ko'tarish uchun ko'targich bilan ishlashga tayyormisiz? (ha/yo'q)",ru:"Готовы ли работать с подъёмником для пациента? (да/нет)",ro:"Sunteți dispus/dispusă să lucrați cu un dispozitiv de ridicare a pacientului? (da/nu)",tl:"Handa ka bang gumamit ng hoist para buhatin ang pasyente? (oo/hindi)",es:"¿Estás dispuesto/a a trabajar con un elevador para levantar al paciente? (sí/no)",fa:"آیا حاضرید با دستگاه بالابر برای جابه‌جایی بیمار کار کنید؟ (بله/خیر)",am:"ታካሚውን ለማንሳት ማንሻ (hoist) ተጠቅመው ለመስራት ፈቃደኛ ነዎት? (አዎ/አይ)"}},
   {key:"diapers",q:{he:"את/ה מוכן/ה לטיפול אישי כולל החלפת חיתולים? (כן/לא)",en:"Are you willing to do personal care including diaper changing? (yes/no)",uz:"Shaxsiy parvarish, jumladan tagliklarni almashtirishga tayyormisiz? (ha/yo'q)",ru:"Готовы ли к личному уходу, включая смену подгузников? (да/нет)",ro:"Sunteți dispus/dispusă la îngrijire personală, inclusiv schimbarea scutecelor? (da/nu)",tl:"Handa ka bang gumawa ng personal care kabilang ang pagpalit ng diaper? (oo/hindi)",es:"¿Estás dispuesto/a a hacer cuidado personal, incluido el cambio de pañales? (sí/no)",fa:"آیا حاضرید مراقبت شخصی از جمله تعویض پوشک انجام دهید؟ (بله/خیر)",am:"ዳይፐር መቀየርን ጨምሮ የግል እንክብካቤ ለማድረግ ፈቃደኛ ነዎት? (አዎ/አይ)"}},
   {key:"coupleHome",q:{he:"את/ה מוכן/ה לעבוד בבית שבו יש גם בן/בת זוג נוסף/ת של המטופל/ת? (כן/לא)",en:"Are you willing to work in a home where the patient's spouse also lives? (yes/no)",uz:"Bemorning turmush o'rtog'i ham yashaydigan uyda ishlashga tayyormisiz? (ha/yo'q)",ru:"Готовы ли работать в доме, где также живёт супруг(а) пациента? (да/нет)",ro:"Sunteți dispus/dispusă să lucrați într-o casă unde locuiește și soțul/soția pacientului? (da/nu)",tl:"Handa ka bang magtrabaho sa bahay na may kasamang asawa ng pasyente? (oo/hindi)",es:"¿Estás dispuesto/a a trabajar en un hogar donde también vive el/la cónyuge del paciente? (sí/no)",fa:"آیا حاضرید در خانه‌ای که همسر بیمار نیز در آن زندگی می‌کند کار کنید؟ (بله/خیر)",am:"የታካሚው የትዳር ጓደኛ በሚኖርበት ቤት ውስጥ ለመስራት ፈቃደኛ ነዎት? (አዎ/አይ)"}},
+  {key:"license",q:{he:"יש לך רישיון נהיגה? (כן/לא)",en:"Do you have a driving license? (yes/no)",uz:"Haydovchilik guvohnomangiz bormi? (ha/yo'q)",ru:"У вас есть водительские права? (да/нет)",ro:"Aveți permis de conducere? (da/nu)",tl:"May driver's license ka ba? (oo/hindi)",es:"¿Tienes licencia de conducir? (sí/no)",fa:"گواهینامه رانندگی دارید؟ (بله/خیر)",am:"የመንጃ ፈቃድ አለዎት? (አዎ/አይ)"}},
+  {key:"smoking",q:{he:"את/ה מעשן/ת? (כן/לא)",en:"Do you smoke? (yes/no)",uz:"Chekasizmi? (ha/yo'q)",ru:"Вы курите? (да/нет)",ro:"Fumați? (da/nu)",tl:"Naninigarilyo ka ba? (oo/hindi)",es:"¿Fumas? (sí/no)",fa:"سیگار می‌کشید؟ (بله/خیر)",am:"ያጨሳሉ? (አዎ/አይ)"}},
+  {key:"smokingHome",q:{he:"יש לך בעיה לעבוד בבית שבו מעשנים? (כן/לא)",en:"Do you have a problem working in a home where people smoke? (yes/no)",uz:"Chekiladigan uyda ishlashda muammoingiz bormi? (ha/yo'q)",ru:"Есть ли проблема работать в доме, где курят? (да/нет)",ro:"Aveți o problemă să lucrați într-o casă unde se fumează? (da/nu)",tl:"May problema ka bang magtrabaho sa bahay na naninigarilyo? (oo/hindi)",es:"¿Tienes problema en trabajar en una casa donde fuman? (sí/no)",fa:"آیا مشکلی با کار در خانه‌ای که در آن سیگار کشیده می‌شود دارید؟ (بله/خیر)",am:"ሰዎች በሚያጨሱበት ቤት ውስጥ ለመስራት ችግር አለዎት? (አዎ/አይ)"}},
   {key:"region",q:{he:"באיזה אזור בארץ תרצה/י לעבוד (מרכז/צפון/דרום), ואת/ה גמיש/ה לאזורים נוספים?",en:"Which region would you like to work in (center/north/south), and are you flexible for other regions?",uz:"Mamlakatning qaysi mintaqasida ishlamoqchisiz (markaz/shimol/janub), va boshqa hududlarga ham moslashuvchanmisiz?",ru:"В каком регионе страны вы хотите работать (центр/север/юг), и готовы ли вы к другим регионам?",ro:"În ce regiune a țării ați dori să lucrați (centru/nord/sud), și sunteți flexibil/ă pentru alte regiuni?",tl:"Saang rehiyon ka gustong magtrabaho (gitna/hilaga/timog), at flexible ka ba sa ibang rehiyon?",es:"¿En qué región del país te gustaría trabajar (centro/norte/sur), y eres flexible para otras regiones?",fa:"در کدام منطقه کشور می‌خواهید کار کنید (مرکز/شمال/جنوب)، و آیا برای مناطق دیگر هم انعطاف‌پذیر هستید؟",am:"በየትኛው የሀገሪቱ ክፍል መስራት ይፈልጋሉ (መሃል/ሰሜን/ደቡብ)፣ እና ለሌሎች አካባቢዎችም ተለዋዋጭ ነዎት?"}},
   {key:"languages",q:{he:"אילו שפות את/ה דובר/ת, ומה רמת השליטה שלך בכל אחת (מ-1 עד 10)?",en:"Which languages do you speak, and how would you rate your level in each (1 to 10)?",uz:"Qaysi tillarda gaplashasiz, va har birida darajangizni qanday baholaysiz (1 dan 10 gacha)?",ru:"На каких языках вы говорите, и как оцениваете свой уровень по каждому (от 1 до 10)?",ro:"Ce limbi vorbiți, și cum vă evaluați nivelul la fiecare (de la 1 la 10)?",tl:"Anong mga wika ang alam mong sabihin, at ano ang antas mo sa bawat isa (1 hanggang 10)?",es:"¿Qué idiomas hablas, y cómo calificarías tu nivel en cada uno (del 1 al 10)?",fa:"به چه زبان‌هایی صحبت می‌کنید و سطح خود را در هر کدام چگونه ارزیابی می‌کنید (از ۱ تا ۱۰)؟",am:"የትኞቹን ቋንቋዎች ይናገራሉ፣ እና በእያንዳንዱ ያለዎትን ደረጃ እንዴት ይገመግማሉ (ከ1 እስከ 10)?"}},
   {key:"strengths",q:{he:"מהם החוזקות שלך כמטפל/ת?",en:"What are your strengths as a caregiver?",uz:"Parvarishchi sifatida kuchli tomonlaringiz nima?",ru:"В чём ваши сильные стороны?",ro:"Care sunt punctele dvs. forte ca îngrijitor?",tl:"Ano ang mga lakas mo?",es:"¿Cuáles son tus fortalezas como cuidador/a?",fa:"نقاط قوت شما به‌عنوان یک مراقب چیست؟",am:"እንደ አስታማሚ ጥንካሬዎችዎ ምንድናቸው?"}},
@@ -2362,6 +2372,7 @@ function buildWorkerFromInterview(partial){ // sanitize AI/user output (spec)
     passport:clean(a.passport,40), arrivalDate:clean(a.arrivalDate,40), workHistory:clean(a.workHistory,1000),
     salaryPast:cleanInt(a.salaryPast,0,50000), genderFlex:clean(a.genderFlex,300),
     coupleHome:yesNo(a.coupleHome), region:clean(a.region,200), regionFlexible:"",
+    license:yesNo(a.license), smoking:yesNo(a.smoking), smokingHome:yesNo(a.smokingHome),
     photo:"", passportPhoto:"", visaPhoto:"", video:"",
     notes:clean(`ניסיון עם קשישים: ${a.elderly||"—"}\nעבד בישראל: ${a.israel||"—"}\nלינה: ${a.live||"—"}\nחוזקות: ${a.strengths||"—"}\nוויזה: ${a.visa||"—"}`,1000),
     tags:["ראיון AI"], starred:false,
@@ -2470,18 +2481,18 @@ async function callInterviewAI(messages,system){
 }
 function aiInterviewSystem(lang){
   return `אתה "מאור", מגייס חם ומקצועי בחברת "עוגן סיעוד". נהל עם המועמד/ת שיחה טבעית וזורמת בשפה: ${lang} — לא תשאול נוקשה של שאלה ואז תשובה.
-ההודעה הראשונה כבר שאלה את השם המלא. המטרה שלך לאסוף בהדרגה, מתוך שיחה אמיתית, את 21 הפרטים הבאים:
+ההודעה הראשונה כבר שאלה את השם המלא. המטרה שלך לאסוף בהדרגה, מתוך שיחה אמיתית, את 24 הפרטים הבאים:
 שם מלא, מספר דרכון/תעודת זהות, מדינת מוצא, תאריך הגעה מדויק לישראל, מין (זכר/נקבה), העדפה/הגבלה לגבי מגדר המטופל/ת,
 שנות ניסיון בטיפול, פירוט מלא של מקומות עבודה קודמים (אצל מי, ומתי בדיוק התחיל/ה וסיים/ה בכל מקום), ניסיון עם קשישים,
 האם עבד/ה בישראל בעבר, נכונות ללינה בבית המטופל, ציפיית שכר חודשית בשקלים, שכר בעבודה הקודמת,
 ניסיון עם אלצהיימר/דמנציה, נכונות לעבודה עם מנוף, נכונות לטיפול אישי כולל חיתולים,
-נכונות לעבוד בבית שיש בו גם בן/בת זוג נוסף/ת של המטופל/ת, אזור עבודה מועדף וגמישות לאזורים נוספים,
-שפות שדובר/ת ורמת שליטה בכל אחת מ-1 עד 10, חוזקות, וסטטוס ויזה.
+נכונות לעבוד בבית שיש בו גם בן/בת זוג נוסף/ת של המטופל/ת, האם יש רישיון נהיגה, האם מעשן/ת, האם יש בעיה לעבוד בבית מעשנים,
+אזור עבודה מועדף וגמישות לאזורים נוספים, שפות שדובר/ת ורמת שליטה בכל אחת מ-1 עד 10, חוזקות, וסטטוס ויזה.
 קרא כל הודעה של המועמד/ת בעיון: אם סיפר/ה כמה דברים בבת אחת — קלוט את כולם ואל תשאל שוב על מה שכבר נענה.
 אם כתב/ה משהו מעניין, לא צפוי, או שאל/ה שאלה — הגב לזה ספציפית ובחום (לא רק "תודה, השאלה הבאה") לפני שתמשיך.
 שאל שאלה אחת בלבד בכל הודעה, ורק על פרט שעדיין חסר. כשכל הפרטים נאספו — כתוב משפט סיום ידידותי, ואז בשורה נפרדת המילה [DONE]
 ואחריה JSON תקין בלבד עם המפתחות:
-{"name","passport","nationality","arrivalDate","gender","genderFlex","experience","workHistory","elderly","israel","live","salary","salaryPast","dementia","hoist","diapers","coupleHome","region","languages","strengths","visa"}.`;
+{"name","passport","nationality","arrivalDate","gender","genderFlex","experience","workHistory","elderly","israel","live","salary","salaryPast","dementia","hoist","diapers","coupleHome","license","smoking","smokingHome","region","languages","strengths","visa"}.`;
 }
 async function aiLeadSummary(leadId){
   const l=leadById(leadId); if(!l)return;
