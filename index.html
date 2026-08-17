@@ -2259,9 +2259,9 @@ function buildWorkerFromInterview(partial){ // sanitize AI/user output (spec)
 /* ============================================================
    FIREBASE REAL-TIME SYNC  (spec א2) — isolated TEST doc by default
    ============================================================ */
-const firebaseConfig={apiKey:"AIzaSyAHFamD1InXLSe1oPFWuuBk_SroK6duVHg",authDomain:"ogen-crm.firebaseapp.com",
-  projectId:"ogen-crm",storageBucket:"ogen-crm.firebasestorage.app",messagingSenderId:"111888037947",
-  appId:"1:111888037947:web:00b833b907138c1309041e"};
+const firebaseConfig={apiKey:"AIzaSyCzjiSwfnKDtluNzPmY7CumU34__uI9QcI",authDomain:"ogen-crm-v2.firebaseapp.com",
+  projectId:"ogen-crm-v2",storageBucket:"ogen-crm-v2.firebasestorage.app",messagingSenderId:"892187312573",
+  appId:"1:892187312573:web:db54fbd9bd54d2a5e7d2d4"};
 let fdoc=null, applyingRemote=false, syncReady=false;
 const syncDoc=()=>localStorage.getItem("ogenSyncDoc")||"main"; // LIVE production doc (crm/main) — shared with the team
 const syncEnabled=()=>localStorage.getItem("ogenSync")!=="0"; // default ON (opt-out)

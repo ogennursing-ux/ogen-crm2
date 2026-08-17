@@ -405,9 +405,9 @@ function saveUsers(){saveUsersLocal();pushCloud();}
 const cgById=id=>caregivers.find(c=>c.id===id);
 
 /* ---------- cloud accounts (Firebase Firestore; graceful fallback to on-device) ---------- */
-const firebaseConfig={apiKey:"AIzaSyAHFamD1InXLSe1oPFWuuBk_SroK6duVHg",authDomain:"ogen-crm.firebaseapp.com",
-  projectId:"ogen-crm",storageBucket:"ogen-crm.firebasestorage.app",messagingSenderId:"111888037947",
-  appId:"1:111888037947:web:00b833b907138c1309041e"};
+const firebaseConfig={apiKey:"AIzaSyCzjiSwfnKDtluNzPmY7CumU34__uI9QcI",authDomain:"ogen-crm-v2.firebaseapp.com",
+  projectId:"ogen-crm-v2",storageBucket:"ogen-crm-v2.firebasestorage.app",messagingSenderId:"892187312573",
+  appId:"1:892187312573:web:db54fbd9bd54d2a5e7d2d4"};
 let fdb=null, cloudTimer=null, unsub=null, applyingCloud=false;
 function initCloud(){try{if(typeof firebase==="undefined")return;if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);fdb=firebase.firestore();}catch(e){console.warn("cloud init",e);}}
 const userDoc=id=>fdb?fdb.collection("hibur").doc(String(id)):null; // separate collection — never touches CRM's crm/main
