@@ -2622,9 +2622,10 @@ async function sendWaQuestionnaire(flow,phone){
     const r=await fetch(WA_START_FLOW_URL,{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({idToken,phone,flow})});
     const data=await r.json();
-    if(data.ok)toast("השאלון נשלח בווטסאפ ✓","ok");
+    if(data.ok&&data.sent&&data.sent.skipped)toast("הבוט עדיין לא מוגדר (ממתין לאימות Meta) — השאלון לא נשלח בפועל","err");
+    else if(data.ok&&data.sent&&data.sent.ok)toast("השאלון נשלח בווטסאפ ✓","ok");
     else if(data.error==="not-staff")toast("רק אנשי צוות יכולים לשלוח שאלון","err");
-    else toast(data.sent&&data.sent.skipped?"הבוט עדיין לא מוגדר (ממתין לאימות Meta)":"שגיאה בשליחה","err");
+    else toast("שגיאה בשליחה","err");
   }catch(e){console.warn("sendWaQuestionnaire",e);toast("שגיאת רשת","err");}
 }
 async function checkPin(){
