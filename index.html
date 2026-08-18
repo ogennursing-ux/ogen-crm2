@@ -399,7 +399,7 @@ table.tbl tr:hover td{background:var(--mist)}
       style="width:100%;height:54px;border-radius:14px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);color:#fff;text-align:center;font-size:16px;padding:0 16px;margin-bottom:12px">
       <option value="">בחר/י שם</option>
     </select>
-    <input id="pinInput" type="password" autocomplete="off" placeholder="סיסמה"
+    <input id="pinInput" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="סיסמה (8 ספרות)"
       style="width:100%;height:54px;border-radius:14px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);color:#fff;text-align:center;font-size:19px;letter-spacing:2px;padding:0 16px;margin-bottom:14px">
     <button id="pinGo"
       style="width:100%;height:50px;border-radius:14px;background:var(--sand);color:var(--sea-950);font-weight:800;font-size:16px">כניסה</button>
@@ -534,7 +534,7 @@ function load(){
   try{const raw=localStorage.getItem(LS_KEY); if(raw){db=JSON.parse(raw);}}
   catch(e){console.warn("load failed",e);}
   for(const c of ["leads","workers","matches","staff","templates","outcomes"]) if(!Array.isArray(db[c])) db[c]=[];
-  if(!db.staff.length) db.staff=[{id:"u1",name:"דביר בנגי",role:"מנהל השמה",code:"2002דביר"},{id:"u4",name:"ניריה ביתן",role:"מנהל השמה",code:"2002ניריה"},{id:"u5",name:"יעל ביתן",role:"מנהל השמה",code:"2002יעל"},{id:"u6",name:"יהודה ארדוט",role:"מנהל השמה",code:"2002יהודה"}];
+  if(!db.staff.length) db.staff=[{id:"u1",name:"דביר בנגי",role:"מנהל השמה",code:"28000494"},{id:"u4",name:"ניריה ביתן",role:"מנהל השמה",code:"55135894"},{id:"u5",name:"יעל ביתן",role:"מנהל השמה",code:"20971711"},{id:"u6",name:"יהודה ארדוט",role:"מנהל השמה",code:"25605919"}];
   purgeOldDeleted(); // auto-clean recycle bin after 30 days (spec א7)
   sanitizeDb(db);
   computeLearning(); // build LEARNED weights from outcome history
