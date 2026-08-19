@@ -465,6 +465,7 @@ const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
 
 /* ---------- security helpers (spec א7) ---------- */
 const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const httpsOnly = url=>/^https:\/\//i.test(url||""); // esc() alone doesn't stop javascript:/data: URLs in an href
 const clean = (s,max=200)=>String(s??"").replace(/<[^>]*>/g,"").replace(/javascript:/gi,"")
   .replace(/[\u0000-\u001F\u007F]/g,"").trim().slice(0,max);
 const cleanInt = (v,min,max)=>{const n=parseInt(String(v).replace(/[^\d-]/g,""),10);
@@ -474,7 +475,7 @@ function sanitizeDb(d){ // strip <> from every text field, on load / sync / save
     if(typeof v==="string")o[k]=v.replace(/[<>]/g,"");
     else if(Array.isArray(v))v.forEach(x=>typeof x==="string"?0:(x&&typeof x==="object"&&scrub(x)));
     else if(v&&typeof v==="object")scrub(v);}};
-  ["leads","workers","matches","staff","templates"].forEach(c=>(d[c]||[]).forEach(scrub));
+  ["leads","workers","matches","staff","templates","outcomes"].forEach(c=>(d[c]||[]).forEach(scrub));
   return d;
 }
 const uid = p => p+"_"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
@@ -734,10 +735,24 @@ function recordOutcome(lead,worker,result,reason){
 }
 function recordOutcomeFromLead(l){
   db.outcomes=db.outcomes||[];
-  if(db.outcomes.some(o=>o.leadId===l.id))return; // once per lead
-  const w=(l.proposedWorkerIds&&l.proposedWorkerIds.length)?workerById(l.proposedWorkerIds[0]):null;
-  if(!w)return; // need the proposed caregiver to learn feature→outcome
-  recordOutcome(l,w,l.status==="סגור-הצלחה"?"success":"fail",l.lostReason||"");
+  // Prefer the caregiver actually placed (placedWorkerId, set on the lead form once known);
+  // fall back to the first proposed candidate only when that isn't set — was always [0]
+  // regardless of who was really placed, silently crediting the wrong caregiver.
+  const w=l.placedWorkerId?workerById(l.placedWorkerId)
+    :(l.proposedWorkerIds&&l.proposedWorkerIds.length?workerById(l.proposedWorkerIds[0]):null);
+  if(!w)return; // need a caregiver to learn feature→outcome
+  const result=l.status==="סגור-הצלחה"?"success":"fail";
+  const existing=db.outcomes.find(o=>o.leadId===l.id);
+  if(existing){
+    // A lead's outcome can legitimately change later (a "fail" that later actually placed
+    // someone, or vice versa) — was permanently frozen at whatever it was first recorded as.
+    if(existing.result===result&&existing.cgId===w.id)return; // nothing actually changed
+    Object.assign(existing,{cgId:w.id,factors:factorsOf(l,w),score:(scoreMatch(l,w)||{}).score||0,
+      result,reason:clean(l.lostReason||"",200),at:now()});
+    computeLearning(); save();
+    return;
+  }
+  recordOutcome(l,w,result,l.lostReason||"");
 }
 function computeLearning(){
   const O=(db.outcomes||[]); const n=O.length;
@@ -768,7 +783,7 @@ function seedLearningHistory(){
     let score=0;const A={sameGender:30,sameCity:40,langMatch:15,salaryMatch:20,hoistMatch:25,dementiaMatch:25,diapersMatch:15,available:10};
     Object.keys(A).forEach(k=>{if(f[k])score+=A[k];});
     db.outcomes.push({id:uid("out"),leadId:"",cgId:"",factors:f,score,result,reason:"",
-      source:["המלצה","פייסבוק","גוגל"][i%3],rep:db.staff[i%db.staff.length].name,at:now()-i*3*864e5});
+      source:["המלצה","פייסבוק","גוגל"][i%3],rep:db.staff[i%db.staff.length].name,at:new Date(Date.now()-i*3*864e5).toISOString()});
   }
   computeLearning(); save(); toast("נטענה היסטוריית למידה לדוגמה","ok"); render();
 }
@@ -834,7 +849,10 @@ function renderDash(v){
       urg.push({type:"overdue",lead:l,txt:`${l.patientName} ${l.patientLastName}`,sub:"מעקב באיחור"});
   });
   hot.forEach(l=>urg.push({type:"hot",lead:l,txt:`${l.patientName} ${l.patientLastName}`,sub:"ליד חם — לטפל היום"}));
-  const urgSorted=urg.slice(0,7);
+  // Was a plain slice(0,7) in insertion order — "hot" leads were always pushed last, so
+  // once there were 7+ stuck/overdue leads, every hot lead silently fell off the list.
+  const URG_WEIGHT={hot:3,overdue:2,stuck:1};
+  const urgSorted=urg.slice().sort((a,b)=>URG_WEIGHT[b.type]-URG_WEIGHT[a.type]).slice(0,7);
 
   const kpi=(ic,color,n,l,trend)=>`<div class="kpi">
     <div class="ic" style="background:${color}22;color:${color}">${svg(ic,20)}</div>
@@ -1032,7 +1050,7 @@ function newLead(){return{id:uid("lead"),date:now(),status:"חדש",assignedTo:m
   patientName:"",patientLastName:"",patientAge:"",gender:"",maritalStatus:"",livingSituation:"",height:"",weight:"",
   city:"",street:"",area:"1",needsHoist:"",needsDiapers:"",hasDementia:"",needsWheelchair:"",hasPermit:"",offeredSalary:"",
   requirements:"",contactName:"",contactRelation:"",contactPhone:"",followUpDate:"",temperature:"warm",starred:false,
-  tags:[],notes:"",lostToCompetitor:false,competitorName:"",lostReason:"",activities:[],proposedWorkerIds:[],
+  tags:[],notes:"",lostToCompetitor:false,competitorName:"",lostReason:"",activities:[],proposedWorkerIds:[],placedWorkerId:"",
   lastEditedBy:me(),lastEditedAt:now(),_deleted:false};}
 const yn=(name,val)=>`<select name="${name}"><option value="" ${val===""?"selected":""}>—</option>
   <option value="yes" ${val==="yes"?"selected":""}>כן</option><option value="no" ${val==="no"?"selected":""}>לא</option></select>`;
@@ -1087,6 +1105,10 @@ function leadForm(l){
       <div class="field"><label>מעקב בתאריך</label><input name="followUpDate" type="date" value="${l.followUpDate?l.followUpDate.slice(0,10):""}"></div>
       <div class="field"><label>תגיות (מופרד בפסיק)</label><input name="tags" value="${esc((l.tags||[]).join(", "))}"></div>
     </div>
+    ${(l.proposedWorkerIds||[]).length?`<div class="field"><label>מי מהמועמדים שהוצעו הוצב/ה בפועל?</label>
+      <select name="placedWorkerId"><option value="">— לא נבחר —</option>
+      ${l.proposedWorkerIds.map(id=>{const w=workerById(id);return w?`<option value="${id}" ${l.placedWorkerId===id?"selected":""}>${esc(w.name)} ${esc(w.lastName)}</option>`:"";}).join("")}
+      </select><p style="font-size:12px;color:var(--ink-3);margin-top:4px">קובע איזה מטפל/ת מקבל/ת קרדיט בלמידה כשסטטוס הליד הוא "סגור-הצלחה".</p></div>`:""}
     <div class="field"><label>הערות</label><textarea name="notes">${esc(l.notes)}</textarea></div>
   </form>`;
 }
@@ -1098,6 +1120,7 @@ function collectLead(l){
   l.patientAge=cleanInt(g("patientAge"),0,130); l.offeredSalary=cleanInt(g("offeredSalary"),0,50000);
   const fu=g("followUpDate"); l.followUpDate=fu?new Date(fu).toISOString():"";
   l.tags=g("tags").split(",").map(t=>clean(t,30)).filter(Boolean);
+  if(f.elements["placedWorkerId"])l.placedWorkerId=clean(g("placedWorkerId"),40);
 }
 
 /* ---------- mini match panel inside lead modal ---------- */
@@ -1184,7 +1207,7 @@ function openWorker(id){
     footer:isNew
       ?`<button class="btn ghost" onclick="closeModal()">ביטול</button><div class="spacer"></div><button class="btn primary" id="saveW">${svg(I.check,16)}צור</button>`
       :`<button class="btn danger sm" onclick="delItem('worker','${w.id}')">${svg(I.trash,15)}מחק</button><div class="spacer"></div>
-        ${w.phone?`<a class="btn sm" href="https://wa.me/${w.phone.replace(/\D/g,"").replace(/^0/,"972")}" target="_blank">${svg(I.chat,15)}וואטסאפ</a>`:""}
+        ${w.phone?`<a class="btn sm" href="https://wa.me/${w.phone.replace(/\D/g,"").replace(/^0/,"972")}" target="_blank" rel="noopener noreferrer">${svg(I.chat,15)}וואטסאפ</a>`:""}
         ${w.phone?`<button class="btn sm" onclick="sendWaQuestionnaire('caregiver','${esc(w.phone)}')">${svg(I.chat,15)}שלח שאלון בווטסאפ</button>`:""}
         <button class="btn primary" id="saveW">${svg(I.check,16)}שמור</button>`,
     onMount
@@ -1264,10 +1287,10 @@ function workerForm(w){
     </div>
     ${(w.photo||w.passportPhoto||w.visaPhoto||w.video)?`<div class="section-label">${svg(I.check,14)} מסמכים וקבצים מהראיון</div>
     <div class="grid3" style="font-size:13px">
-      ${w.photo?`<a class="btn sm" href="${esc(w.photo)}" target="_blank">${svg(I.check,14)} תמונה</a>`:""}
-      ${w.passportPhoto?`<a class="btn sm" href="${esc(w.passportPhoto)}" target="_blank">${svg(I.check,14)} דרכון</a>`:""}
-      ${w.visaPhoto?`<a class="btn sm" href="${esc(w.visaPhoto)}" target="_blank">${svg(I.check,14)} ויזה</a>`:""}
-      ${w.video?`<a class="btn sm" href="${esc(w.video)}" target="_blank">${svg(I.check,14)} סרטון</a>`:""}
+      ${httpsOnly(w.photo)?`<a class="btn sm" href="${esc(w.photo)}" target="_blank" rel="noopener noreferrer">${svg(I.check,14)} תמונה</a>`:""}
+      ${httpsOnly(w.passportPhoto)?`<a class="btn sm" href="${esc(w.passportPhoto)}" target="_blank" rel="noopener noreferrer">${svg(I.check,14)} דרכון</a>`:""}
+      ${httpsOnly(w.visaPhoto)?`<a class="btn sm" href="${esc(w.visaPhoto)}" target="_blank" rel="noopener noreferrer">${svg(I.check,14)} ויזה</a>`:""}
+      ${httpsOnly(w.video)?`<a class="btn sm" href="${esc(w.video)}" target="_blank" rel="noopener noreferrer">${svg(I.check,14)} סרטון</a>`:""}
     </div>`:""}
     <div class="field"><label>הערות</label><textarea name="notes">${esc(w.notes)}</textarea></div>
   </form>`;
@@ -1435,7 +1458,7 @@ function renderHibur(v){
             <input id="famLink" value="${esc(familyLink)}" readonly>
             <button class="btn" onclick="navigator.clipboard.writeText($('#famLink').value);toast('הקישור הועתק','ok')">העתק</button>
           </div>
-          <a class="btn primary" href="${esc(familyLink)}" target="_blank" style="margin-top:12px;width:100%;justify-content:center">${svg(I.match,16)}פתח/י את חיבור בקליק</a>
+          <a class="btn primary" href="${esc(familyLink)}" target="_blank" rel="noopener noreferrer" style="margin-top:12px;width:100%;justify-content:center">${svg(I.match,16)}פתח/י את חיבור בקליק</a>
         </div>
       </div>
     </div>
@@ -1847,9 +1870,21 @@ function renderReports(v){
   const closed=leads.filter(l=>l.status.startsWith("סגור"));
   // rep performance
   const reps={};
-  leads.forEach(l=>{const r=l.assignedTo||"—";reps[r]=reps[r]||{total:0,won:0,open:0};
-    reps[r].total++; if(l.status==="סגור-הצלחה")reps[r].won++; if(!l.status.startsWith("סגור"))reps[r].open++;});
-  const repRows=Object.entries(reps).sort((a,b)=>b[1].won-a[1].won);
+  leads.forEach(l=>{const r=l.assignedTo||"—";reps[r]=reps[r]||{total:0,won:0,open:0,closed:0};
+    reps[r].total++; if(l.status==="סגור-הצלחה")reps[r].won++; if(!l.status.startsWith("סגור"))reps[r].open++;
+    if(l.status.startsWith("סגור"))reps[r].closed++;});
+  // Ranking by absolute win count rewarded whoever simply has the most leads, not who
+  // converts best. Rank by success rate (min 3 closed leads to avoid a 1/1 rep beating a
+  // 40/50 rep on a fluke), volume as the tiebreak; reps below the sample threshold sort
+  // after the ranked group instead of being compared on a meaningless rate.
+  const REP_MIN_SAMPLE=3;
+  const repRows=Object.entries(reps).map(([name,r])=>[name,Object.assign({},r,{rate:r.closed?r.won/r.closed:0})])
+    .sort((a,b)=>{
+      const aq=a[1].closed>=REP_MIN_SAMPLE, bq=b[1].closed>=REP_MIN_SAMPLE;
+      if(aq!==bq)return aq?-1:1;
+      if(aq&&bq)return b[1].rate-a[1].rate||b[1].won-a[1].won;
+      return b[1].won-a[1].won;
+    });
   const maxWon=Math.max(1,...repRows.map(r=>r[1].won));
   // salary
   const sal=leads.map(l=>Number(l.offeredSalary)).filter(Boolean);
@@ -1858,7 +1893,10 @@ function renderReports(v){
   // availability
   const availBreak=WORK_ST.map(s=>({s,n:workers.filter(w=>w.status===s).length}));
   // 12-month trend (by month of date)
-  const months=[...Array(12)].map((_,i)=>{const d=new Date();d.setMonth(d.getMonth()-(11-i));return d;});
+  // Anchor to the 1st before subtracting months — setMonth() on e.g. the 31st can overflow
+  // into the wrong month once the target month has fewer days (Jan 31 minus 1 month lands
+  // on Mar 2/3, not Feb), silently skipping a month in the trend.
+  const months=[...Array(12)].map((_,i)=>{const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-(11-i));return d;});
   const trend=months.map(d=>leads.filter(l=>{const ld=new Date(l.date);return ld.getMonth()===d.getMonth()&&ld.getFullYear()===d.getFullYear();}).length);
   const maxT=Math.max(1,...trend);
 
@@ -2111,27 +2149,85 @@ function checkBackupReminder(){ // spec א7: weekly backup reminder
 }
 function importJSON(e){
   const f=e.target.files[0];if(!f)return;const r=new FileReader();
-  r.onload=()=>{try{const d=JSON.parse(r.result);["leads","workers","matches","staff","templates"].forEach(c=>{if(Array.isArray(d[c]))db[c]=d[c];});
-    sanitizeDb(db);save();toast("שוחזר בהצלחה","ok");render();renderNav();}catch(err){toast("קובץ לא תקין","err");}};
+  r.onload=()=>{
+    try{
+      const d=JSON.parse(r.result);
+      const COLLS=["leads","workers","matches","staff","templates","outcomes"];
+      for(const c of COLLS){
+        if(d[c]!==undefined&&!Array.isArray(d[c])){toast("קובץ לא תקין — "+c+" אינו רשימה","err");return;}
+        if(Array.isArray(d[c])&&d[c].some(x=>!x||typeof x!=="object"||typeof x.id!=="string")){
+          toast("קובץ לא תקין — רשומה ללא id תקין ב-"+c,"err");return;
+        }
+      }
+      // Never trust imported IDs — a crafted id string could otherwise be interpolated
+      // into an inline onclick handler elsewhere in the UI and break out of it (stored
+      // XSS via import). Regenerate every id and rewrite the cross-references that
+      // depend on the old ones (proposedWorkerIds → worker ids) so nothing dangles.
+      const workerIdMap=new Map(), leadIdMap=new Map();
+      if(Array.isArray(d.workers))d.workers.forEach(w=>{const old=w.id;w.id=uid("wrk");if(old)workerIdMap.set(old,w.id);});
+      if(Array.isArray(d.leads))d.leads.forEach(l=>{
+        const old=l.id;l.id=uid("lead");if(old)leadIdMap.set(old,l.id);
+        if(Array.isArray(l.proposedWorkerIds))l.proposedWorkerIds=l.proposedWorkerIds.map(id=>workerIdMap.get(id)).filter(Boolean);
+        if(l.placedWorkerId)l.placedWorkerId=workerIdMap.get(l.placedWorkerId)||"";
+      });
+      if(Array.isArray(d.matches))d.matches.forEach(m=>{m.id=uid("match");});
+      if(Array.isArray(d.outcomes))d.outcomes.forEach(o=>{
+        o.id=uid("out");
+        if(o.leadId)o.leadId=leadIdMap.get(o.leadId)||"";
+        if(o.cgId)o.cgId=workerIdMap.get(o.cgId)||"";
+      });
+      if(Array.isArray(d.templates))d.templates.forEach(t=>{t.id=uid("tpl");});
+      // Staff codes are credentials — an imported backup must never silently reintroduce
+      // old/leaked codes; keep everything else but drop the code field on import.
+      if(Array.isArray(d.staff))d.staff.forEach(s=>{s.id=uid("stf");delete s.code;});
+      COLLS.forEach(c=>{if(Array.isArray(d[c]))db[c]=d[c];});
+      sanitizeDb(db);save();toast("שוחזר בהצלחה (קודי צוות אופסו — יש להגדיר מחדש)","ok");render();renderNav();
+    }catch(err){toast("קובץ לא תקין","err");}
+  };
   r.readAsText(f);
+}
+function csvSafe(v){ // neutralize CSV formula injection (=,+,-,@ leading a cell opens it as a formula in Excel/Sheets)
+  const s=String(v??"");
+  return /^[=+\-@\t\r]/.test(s)?"'"+s:s;
 }
 function exportExcel(){ // CSV (Excel-friendly, spec ייצוא)
   const rows=[["שם","עיר","גיל","סטטוס","רכז","שכר","טמפ׳","טלפון"]];
   alive("leads").forEach(l=>rows.push([l.patientName+" "+l.patientLastName,l.city,l.patientAge,l.status,l.assignedTo,l.offeredSalary,l.temperature,l.contactPhone]));
-  const csv="﻿"+rows.map(r=>r.map(c=>`"${String(c??"").replace(/"/g,'""')}"`).join(",")).join("\n");
+  const csv="﻿"+rows.map(r=>r.map(c=>`"${csvSafe(c).replace(/"/g,'""')}"`).join(",")).join("\n");
   dl(new Blob([csv],{type:"text/csv"}),"ogen-לידים.csv"); toast("יוצא ל-CSV","ok");
+}
+function icsEscape(v){ // RFC 5545 TEXT escaping — a raw CR/LF in a value would inject extra ICS lines/properties
+  return String(v??"").replace(/\\/g,"\\\\").replace(/[;]/g,"\\;").replace(/,/g,"\\,").replace(/\r\n|\r|\n/g,"\\n");
 }
 function exportICS(){
   let ics="BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//ogen//crm//HE\n";
   alive("leads").filter(l=>l.followUpDate).forEach(l=>{
     const d=new Date(l.followUpDate).toISOString().replace(/[-:]/g,"").split(".")[0]+"Z";
-    ics+=`BEGIN:VEVENT\nDTSTART:${d}\nSUMMARY:מעקב — ${l.patientName} ${l.patientLastName}\nDESCRIPTION:${l.city} · ${l.assignedTo}\nEND:VEVENT\n`;});
+    ics+=`BEGIN:VEVENT\nDTSTART:${d}\nSUMMARY:${icsEscape("מעקב — "+l.patientName+" "+l.patientLastName)}\nDESCRIPTION:${icsEscape(l.city+" · "+l.assignedTo)}\nEND:VEVENT\n`;});
   ics+="END:VCALENDAR"; dl(new Blob([ics],{type:"text/calendar"}),"ogen-מעקבים.ics"); toast("יומן יוצא","ok");
 }
 function dl(blob,name){const u=URL.createObjectURL(blob);const a=document.createElement("a");a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);}
-function wipeAll(){if(confirm("לאפס את כל הנתונים? פעולה בלתי-הפיכה."))
-  {localStorage.removeItem(LS_KEY);db={leads:[],workers:[],matches:[],staff:[],templates:[]};load();save();toast("המערכת אופסה","ok");render();renderNav();}}
-function reseed(){db={leads:[],workers:[],matches:[],staff:[],templates:[]};load();seed();toast("נתוני דמו נטענו","ok");render();renderNav();}
+function confirmDestructiveReset(action){
+  // A single confirm() is too easy to click through for an action that, with sync on,
+  // overwrites the shared production document for the whole team — require typing the
+  // sync document's name back, so the person doing this can see exactly what they're
+  // about to wipe (audit remediation: wipeAll/reseed used to push straight to cloud).
+  if(syncEnabled()&&fdoc){
+    const doc=syncDoc();
+    const typed=prompt(`פעולה זו (${action}) תדרוס את מסמך הסנכרון החי "crm/${doc}" עבור כל הצוות. להמשיך — הקלד/י את שם המסמך (${doc}) לאישור:`);
+    if(typed!==doc){toast("בוטל — השם לא תואם","err");return false;}
+    return true;
+  }
+  return confirm(`${action} — פעולה בלתי-הפיכה. להמשיך?`);
+}
+function wipeAll(){
+  if(!confirmDestructiveReset("איפוס מערכת"))return;
+  localStorage.removeItem(LS_KEY);db={leads:[],workers:[],matches:[],staff:[],templates:[]};load();save();toast("המערכת אופסה","ok");render();renderNav();
+}
+function reseed(){
+  if(!confirmDestructiveReset("טעינת נתוני דמו"))return;
+  db={leads:[],workers:[],matches:[],staff:[],templates:[]};load();seed();save();toast("נתוני דמו נטענו","ok");render();renderNav();
+}
 function addStaff(){
   const name=clean($("#newStaffName").value,60), role=clean($("#newStaffRole").value,40)||"רכז/ת";
   const code=clean($("#newStaffCode").value,40);
@@ -2268,6 +2364,7 @@ function launchInterview(){
   $$("#ivBody [data-lang]").forEach(b=>b.onclick=()=>beginInterview(b.dataset.lang));
 }
 function beginInterview(lang){
+  ivSessionId=uid("ivs"); // fresh id per interview — see declaration above
   const L=IV_LANGS[lang];
   ivState={lang,code:L.code,idx:-1,answers:{},messages:[],mode:"ai",system:aiInterviewSystem(lang)};
   $("#ivBody").innerHTML="";$("#ivFoot").style.display="flex";
@@ -2332,16 +2429,23 @@ function partialSaveInterview(){
   else Object.assign(w,buildWorkerFromInterview(true),{id:w.id,_ivSession:ivSessionId});
   save();
 }
-const ivSessionId=uid("ivs");
+let ivSessionId=uid("ivs"); // regenerated per interview in beginInterview() — was a page-lifetime
+// const, so a second interview in the same page load could silently overwrite the first
+// candidate's partial record instead of creating its own.
 function finishInterview(){
   const w=buildWorkerFromInterview(false);
   const existing=db.workers.find(x=>x._ivSession===ivSessionId);
   if(existing)Object.assign(existing,w,{id:existing.id});else db.workers.push(w);
+  // The record actually persisted keeps `existing.id` when a partial save ran earlier —
+  // w.id is a freshly-generated id that was discarded by the merge above and matches
+  // nothing in db.workers. Uploads were silently going nowhere while still showing
+  // "uploaded" in the UI.
+  const finalId=existing?existing.id:w.id;
   save();
   const L=IV_LANGS[ivState.lang];
   ivBotSay(L.done,()=>{
     $("#ivFoot").style.display="none";
-    setTimeout(()=>showInterviewUploads(w.id,w.name,w.nationality),400);
+    setTimeout(()=>showInterviewUploads(finalId,w.name,w.nationality),400);
   });
 }
 function showInterviewDone(name,nationality){
@@ -2371,8 +2475,9 @@ function showInterviewUploads(workerId,name,nationality){
       try{
         const res=await uploadToCloudinary(file);
         const w=db.workers.find(x=>x.id===workerId);
-        if(w){ if(key==="photo")w.photo=res.secure_url; else if(key==="passport")w.passportPhoto=res.secure_url;
-          else if(key==="visa")w.visaPhoto=res.secure_url; else if(key==="video")w.video=res.secure_url; save(); }
+        if(!w){ $(`#ivStatus_${key}`).textContent=""; toast("הפרופיל לא נמצא — לא ניתן לצרף את הקובץ","err"); return; }
+        if(key==="photo")w.photo=res.secure_url; else if(key==="passport")w.passportPhoto=res.secure_url;
+        else if(key==="visa")w.visaPhoto=res.secure_url; else if(key==="video")w.video=res.secure_url; save();
         $(`#ivStatus_${key}`).textContent=U.uploaded;
       }catch(err){ $(`#ivStatus_${key}`).textContent=""; toast("שגיאה בהעלאה — נסו שוב","err"); console.warn(err); }
     };
@@ -2418,7 +2523,7 @@ function buildWorkerFromInterview(partial){ // sanitize AI/user output (spec)
 const firebaseConfig={apiKey:"AIzaSyCzjiSwfnKDtluNzPmY7CumU34__uI9QcI",authDomain:"ogen-crm-v2.firebaseapp.com",
   projectId:"ogen-crm-v2",storageBucket:"ogen-crm-v2.firebasestorage.app",messagingSenderId:"892187312573",
   appId:"1:892187312573:web:db54fbd9bd54d2a5e7d2d4"};
-let fdoc=null, applyingRemote=false, syncReady=false;
+let fdoc=null, fdocUnsub=null, applyingRemote=false, syncReady=false;
 const syncDoc=()=>localStorage.getItem("ogenSyncDoc")||"main"; // LIVE production doc (crm/main) — shared with the team
 const syncEnabled=()=>localStorage.getItem("ogenSync")!=="0"; // default ON (opt-out)
 function setSyncStatus(s){
@@ -2429,22 +2534,27 @@ function setSyncStatus(s){
   el.title="מסמך סנכרון: crm/"+syncDoc();
 }
 function serializableDb(){
-  const c=JSON.parse(JSON.stringify({leads:db.leads,workers:db.workers,matches:db.matches,staff:db.staff,templates:db.templates}));
+  // outcomes was missing here — the learning model only ever existed in this one
+  // browser's localStorage, so recommendations silently differed by device/staff member.
+  const c=JSON.parse(JSON.stringify({leads:db.leads,workers:db.workers,matches:db.matches,staff:db.staff,templates:db.templates,outcomes:db.outcomes||[]}));
   c.workers.forEach(w=>{delete w._ivSession;}); c._lastUpdate=now(); return c;
 }
 function initFirebase(){
-  if(!syncEnabled()){setSyncStatus("local");return;}
+  if(fdocUnsub){fdocUnsub();fdocUnsub=null;} // stop any previous listener before attaching a new one —
+  // without this, switching sync documents left the OLD listener running forever, applying
+  // whichever doc it was originally attached to on top of whatever the new one writes.
+  if(!syncEnabled()){fdoc=null;setSyncStatus("local");return;}
   if(typeof firebase==="undefined"){setSyncStatus("error");return;}
   try{
     if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     fdoc=firebase.firestore().collection("crm").doc(syncDoc());
     syncReady=false; setSyncStatus("connecting");
-    fdoc.onSnapshot({includeMetadataChanges:true},snap=>{
+    fdocUnsub=fdoc.onSnapshot({includeMetadataChanges:true},snap=>{
       if(snap.metadata.hasPendingWrites) return;              // ignore our own local echo
       const data=snap.data();
       if(data){
         applyingRemote=true;
-        ["leads","workers","matches","staff","templates"].forEach(c=>{if(Array.isArray(data[c]))db[c]=data[c];});
+        ["leads","workers","matches","staff","templates","outcomes"].forEach(c=>{if(Array.isArray(data[c]))db[c]=data[c];});
         sanitizeDb(db);
         try{localStorage.setItem(LS_KEY,JSON.stringify(db));}catch(e){}
         applyingRemote=false;
@@ -2464,7 +2574,7 @@ function pushCloud(){
 }
 function toggleSync(on){
   localStorage.setItem("ogenSync",on?"1":"0");
-  if(on) initFirebase(); else { fdoc=null; setSyncStatus("local"); }
+  if(on) initFirebase(); else { if(fdocUnsub){fdocUnsub();fdocUnsub=null;} fdoc=null; setSyncStatus("local"); }
 }
 
 /* ============================================================

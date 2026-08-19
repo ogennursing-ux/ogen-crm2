@@ -290,7 +290,13 @@ async function doLogin(){
   me=d; localStorage.setItem(SESS,id); enterApp();
 }
 function logout(){localStorage.removeItem(SESS);if(connUnsub)connUnsub();me=null;try{firebase.auth().signOut();}catch(e){}go("welcome");}
-function saveMe(){if(!fdb||!me)return;try{cgDoc(me.id).set(JSON.parse(JSON.stringify(me)),{merge:true});}catch(e){}}
+function saveMe(){
+  // Was fire-and-forget — the try/catch only guarded synchronous construction of the
+  // write, never the write itself, so callers always showed a success toast even when
+  // Firestore rejected it. Now returns a promise callers can actually await.
+  if(!fdb||!me)return Promise.resolve(false);
+  return cgDoc(me.id).set(JSON.parse(JSON.stringify(me)),{merge:true}).then(()=>true).catch(e=>{console.warn("saveMe",e);return false;});
+}
 
 /* ---------- app shell ---------- */
 const TABS=[["profile","פרופיל",I.user],["requests","פניות",I.heart],["matches","מאצ'ים",I.match],["chats","צ'אט",I.chat]];
@@ -306,15 +312,19 @@ function switchTab(t){curTab=t;$("#topTitle").textContent=TABS.find(x=>x[0]===t)
 
 /* ---------- connections (shared with family app) ---------- */
 const connId=c=>c.famId+"__"+c.cgId;
-let requireApproval=false;
+// Fail-closed until the real config has loaded — see family/index.html for the full
+// rationale (was: requireApproval=false let a mutual like briefly count as matched).
+let requireApproval=true, hiburConfigLoaded=false;
 function loadHiburConfig(){
   if(!fdb)return;
   fdb.collection("hibur_config").doc("settings").onSnapshot(snap=>{
     requireApproval=!!(snap.data()&&snap.data().requireApproval);
+    hiburConfigLoaded=true;
     if($("#main").classList.contains("on"))switchTab(curTab);
   },()=>{});
 }
-const isMatched=c=>!!(c&&c.famLiked&&c.cgLiked&&(!requireApproval||c.approved));
+// See family/index.html for the full rationale on this 3-state (absent/true/false) model.
+const isMatched=c=>!!(c&&hiburConfigLoaded&&c.famLiked&&c.cgLiked&&(requireApproval?c.approved===true:c.approved!==false));
 function subscribeConns(){
   if(!fdb||!me)return; if(connUnsub)connUnsub();
   connUnsub=connCol().where("cgId","==",me.id).onSnapshot(snap=>{
@@ -419,7 +429,7 @@ $("#docInput").onchange=async e=>{
   toast("מעלה מסמך…");
   try{
     const [uploadRes,b64]=await Promise.all([uploadToCloudinary(f),blobToB64(f)]);
-    me.idDoc=uploadRes.secure_url; saveMe();
+    me.idDoc=uploadRes.secure_url; await saveMe();
     if(hasAI()){
       toast("בודק מסמך…");
       try{
@@ -432,7 +442,7 @@ $("#docInput").onchange=async e=>{
         const d=m?JSON.parse(m[0]):{ok:false,reason:"לא ניתן היה לנתח את המסמך אוטומטית"};
         me.idDocCheck={ok:!!d.ok,reason:d.reason||"",checkedAt:nowT()};
       }catch(err){me.idDocCheck={ok:false,reason:"שגיאה בבדיקה האוטומטית — יבדק ידנית",checkedAt:nowT()};console.warn(err);}
-      saveMe();
+      await saveMe();
     }
     toast("המסמך נשמר ✓"); renderProfile();
   }catch(err){toast("שגיאה בהעלאה — נסו שוב");console.warn(err);}
@@ -448,19 +458,19 @@ async function generateBio(){
       `מה שהמטפל/ת כתב/ה על עצמו/ה: "${about}"\n\nנסח/י מזה תיאור קצר (2-3 משפטים) חם ומקצועי בעברית, בגוף שלישי, שמציג את המטפל/ת למשפחות. בלי הגזמות, בלי כותרות.`,
       "את/ה כותב/ת קופי מקצועי לפרופילי מטפלים באפליקציית התאמה. תשובה קצרה וחמה בלבד, בלי מירכאות."
     );
-    if(bio){me.about=about;me.bio=bio;saveMe();toast("התיאור נוצר ✓");renderProfile();}
+    if(bio){me.about=about;me.bio=bio;const ok=await saveMe();toast(ok?"התיאור נוצר ✓":"נוצר, אך השמירה נכשלה — נסו שוב",ok?"ok":"err");renderProfile();}
   }catch(e){toast("שגיאה — נסו שוב");console.warn(e);}
 }
 const yn=(k,v)=>`<div class="opts" id="yn-${k}">${[["yes","כן"],["no","לא"]].map(([val,l])=>`<button class="opt ${v===val?"sel":""}" data-v="${val}" onclick="pickYN('${k}','${val}')">${l}</button>`).join("")}</div>`;
 let ynState={};
 function pickYN(k,v){ynState[k]=v;$$("#yn-"+k+" .opt").forEach(b=>b.classList.toggle("sel",b.dataset.v===v));}
-function saveProfile(){
+async function saveProfile(){
   me.name=$("#f-name").value.trim(); me.nationality=$("#f-nat").value; me.gender=$("#f-gender").value;
   me.age=$("#f-age").value; me.city=$("#f-city").value; me.phone=$("#f-phone").value.trim(); me.email=$("#f-email").value.trim();
   me.languages=$("#f-lang").value.trim(); me.experience=$("#f-exp").value; me.expectedSalary=+$("#f-sal").value||0;
   me.canHoist=ynState.hoist||me.canHoist; me.canDiapers=ynState.diapers||me.canDiapers; me.knowsDementia=ynState.dementia||me.knowsDementia;
   me.about=($("#f-about")||{}).value||me.about||"";
-  saveMe(); toast("הפרופיל נשמר ✓"); renderProfile();
+  const ok=await saveMe(); toast(ok?"הפרופיל נשמר ✓":"השמירה נכשלה — בדקו חיבור ונסו שוב",ok?"ok":"err"); renderProfile();
 }
 /* photo upload → resize client-side → upload to Cloudinary → store secure_url */
 $("#photoInput").onchange=e=>{const f=e.target.files[0];if(!f)return;
@@ -472,7 +482,7 @@ $("#photoInput").onchange=e=>{const f=e.target.files[0];if(!f)return;
     cv.toBlob(async blob=>{
       toast("מעלה תמונה…");
       try{const res=await uploadToCloudinary(blob);
-        me.photo=res.secure_url; saveMe(); toast("התמונה הועלתה ✓"); renderProfile();
+        me.photo=res.secure_url; const ok=await saveMe(); toast(ok?"התמונה הועלתה ✓":"התמונה הועלתה אך השמירה נכשלה — נסו שוב",ok?"ok":"err"); renderProfile();
       }catch(err){toast("שגיאה בהעלאה — נסו שוב");console.warn(err);}
     },"image/jpeg",0.82);
   };img.src=rd.result;};rd.readAsDataURL(f);};
@@ -483,7 +493,7 @@ function openVideoModal(){
     <button class="big-btn cool" onclick="$('#modalRoot').innerHTML='';$('#videoInput').click()">${svg(I.cam,18)} העלאת סרטון מהמכשיר</button>
     <div style="margin:16px 0 10px;font-size:12px;color:var(--ink-3)">— או הדביקו קישור קיים —</div>
     <div class="field"><input id="vurl" placeholder="https://..." value="${esc(me.video&&me.video.includes('res.cloudinary.com')?'':(me.video||''))}" dir="ltr" style="text-align:left"></div>
-    <button class="big-btn" style="background:var(--paper);border:1.5px solid var(--line);box-shadow:none;color:var(--ink-2)" onclick="const v=$('#vurl').value.trim();if(v){me.video=v;saveMe();toast('נשמר ✓');renderProfile();}$('#modalRoot').innerHTML=''">שמירת קישור</button>
+    <button class="big-btn" style="background:var(--paper);border:1.5px solid var(--line);box-shadow:none;color:var(--ink-2)" onclick="(async()=>{const v=$('#vurl').value.trim();if(v){if(!/^https:\/\//i.test(v)){toast('הקישור חייב להתחיל ב-https://','err');return;}me.video=v;const ok=await saveMe();toast(ok?'נשמר ✓':'השמירה נכשלה — נסו שוב',ok?'ok':'err');renderProfile();}$('#modalRoot').innerHTML='';})()">שמירת קישור</button>
   </div></div>`;
 }
 $("#videoInput").onchange=async e=>{
@@ -492,7 +502,7 @@ $("#videoInput").onchange=async e=>{
   $("#modalRoot").innerHTML=`<div class="scrim"><div class="modal"><div class="mi">${svg(I.video,28)}</div><h3>מעלה סרטון…</h3><p id="vidPct" style="font-size:22px;font-weight:800;color:var(--anchor)">0%</p></div></div>`;
   try{
     const res=await uploadToCloudinary(f,{onProgress:p=>{const el=$("#vidPct");if(el)el.textContent=p+"%";}});
-    me.video=res.secure_url; saveMe(); $("#modalRoot").innerHTML=""; toast("הסרטון הועלה ✓"); renderProfile();
+    me.video=res.secure_url; const ok=await saveMe(); $("#modalRoot").innerHTML=""; toast(ok?"הסרטון הועלה ✓":"הועלה אך השמירה נכשלה — נסו שוב",ok?"ok":"err"); renderProfile();
   }catch(err){ $("#modalRoot").innerHTML=""; toast("שגיאה בהעלאת הסרטון — נסו שוב"); console.warn(err); }
   e.target.value="";
 };
@@ -500,7 +510,9 @@ $("#videoInput").onchange=async e=>{
 /* ---------- REQUESTS (families interested) ---------- */
 function renderRequests(){const tab=$("#tab");tab.className="tab pad";
   if(!me.name){tab.innerHTML=emptyState(I.user,"קודם השלימו פרופיל","מלאו את הפרטים והעלו תמונה — כדי שמשפחות יוכלו למצוא אתכם");return;}
-  const rq=conns.filter(c=>c.cgId===me.id&&c.famLiked&&!c.cgLiked);
+  // cgLiked===false means this candidate was actively declined, not "not yet answered" —
+  // !c.cgLiked treated both the same, so a rejected request kept reappearing here forever.
+  const rq=conns.filter(c=>c.cgId===me.id&&c.famLiked&&c.cgLiked==null);
   if(!rq.length){tab.innerHTML=emptyState(I.heart,"אין פניות חדשות","כשמשפחה תסמן שהיא מעוניינת בך — היא תופיע כאן, ותוכל/י להשיב");return;}
   tab.innerHTML=`<div class="list-head">${rq.length} משפחות מעוניינות בך</div>`+rq.map(c=>{const f=c.fam||{};
     return `<div class="rq">
@@ -558,7 +570,7 @@ function renderChat(c){const f=c.fam||{};const msgs=c.msgs||[];
     <div class="ct-head"><button class="back" onclick="go('main');switchTab('chats')">→</button>
       <div class="av" style="width:40px;height:40px;border-radius:50%;font-size:16px">${esc((f.name||"?")[0])}</div>
       <div class="who"><b>${esc(f.name||"משפחה")}</b><span>${esc(f.city||"")}</span></div>
-      <a class="wa" style="margin-inline-start:auto;color:var(--anchor)" href="${jitsiLink(c._id)}" target="_blank" title="שיחת וידאו">${svg(I.video,20)}</a></div>
+      <a class="wa" style="margin-inline-start:auto;color:var(--anchor)" href="${jitsiLink(c._id)}" target="_blank" rel="noopener noreferrer" title="שיחת וידאו">${svg(I.video,20)}</a></div>
     <div class="ct-body" id="ctBody">${msgs.length?msgs.map(bubble).join(""):`<div style="text-align:center;color:var(--ink-3);font-size:12px;padding:8px">תחילת השיחה עם ${esc(f.name||"המשפחה")}</div>`}</div>
     <div class="ct-foot"><input id="ctInput" placeholder="הקלד/י הודעה…" onkeydown="if(event.key==='Enter')sendMsg()"><button class="send" onclick="sendMsg()">${svg(I.send,20)}</button></div>`;
   const b=$("#ctBody");b.scrollTop=b.scrollHeight;
@@ -571,12 +583,18 @@ function bubble(m){
     ${secondary?`<div style="opacity:.7;font-size:11.5px;margin-top:5px;padding-top:5px;border-top:1px solid rgba(0,0,0,.12)">🌐 ${esc(secondary)}</div>`:""}
     <time>${timeStr(m.at)}</time></div>`;
 }
-async function sendMsg(){const inp=$("#ctInput");const t=inp.value.trim();if(!t||!chatConn)return;inp.value="";
+async function sendMsg(){const inp=$("#ctInput");const t=inp.value.trim();if(!t||!chatConn)return;
+  if(!isMatched(chatConn)){toast("ההתאמה כבר לא פעילה","err");go("main");switchTab("chats");return;}
+  const targetConn=chatConn; // capture before the await — chatConn (global) can change while
+  // translateMsg is in flight if the user switches to a different conversation, which used
+  // to send the message to whatever conversation was open when the translation finished.
+  inp.value="";
   const msg={from:"cg",text:t,at:nowT()};
   const tr=await translateMsg(t,"Hebrew");
   if(tr){msg.translated=tr;msg.translatedLang="עברית";}
-  connCol().doc(chatConn._id).set({msgs:AU(msg),updatedAt:nowT()},{merge:true}).catch(e=>console.warn(e));
-  chatConn.msgs=(chatConn.msgs||[]).concat(msg);renderChat(chatConn);
+  connCol().doc(targetConn._id).set({msgs:AU(msg),updatedAt:nowT()},{merge:true}).catch(e=>console.warn(e));
+  targetConn.msgs=(targetConn.msgs||[]).concat(msg);
+  if(chatConn===targetConn)renderChat(chatConn);
   const waPhone=chatConn.fam&&chatConn.fam.phone; if(waPhone)bridgeToWhatsapp(waPhone,msg.translated||t,chatConn._id);
 }
 

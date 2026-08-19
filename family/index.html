@@ -706,16 +706,25 @@ let famConns=[], connUnsub2=null, readAt={}, matchedIds=[];
 const connCol=()=>fdb?fdb.collection("hibur_conn"):null;
 const AU=x=>firebase.firestore.FieldValue.arrayUnion(x);
 const connFor=cgId=>famConns.find(c=>c.cgId===cgId);
-/* coordinator approval gate — off unless CRM turns it on in hibur_config/settings */
-let requireApproval=false;
+/* coordinator approval gate — off unless CRM turns it on in hibur_config/settings.
+   Starts fail-closed (nothing counts as matched) until the real setting has actually
+   loaded — the old default (requireApproval=false) meant a mutual like briefly counted
+   as a full match, exposing contact/chat, in the window before this config arrived. */
+let requireApproval=true, hiburConfigLoaded=false;
 function loadHiburConfig(){
   if(!fdb)return;
   fdb.collection("hibur_config").doc("settings").onSnapshot(snap=>{
     requireApproval=!!(snap.data()&&snap.data().requireApproval);
+    hiburConfigLoaded=true;
     if($("#main").classList.contains("on"))switchTab(curTab);
   },()=>{});
 }
-const isMatched=c=>!!(c&&c.famLiked&&c.cgLiked&&(!requireApproval||c.approved));
+// Three states for c.approved: absent/null = not yet reviewed by staff, true = approved,
+// false = explicitly rejected. Gate ON requires an explicit true (unreviewed matches don't
+// count) — grandfathered matches from before this field existed were backfilled to true in
+// production, so they aren't wrongly hidden. Gate OFF only blocks an explicit rejection —
+// toggling the gate off must never revive a match staff actively rejected.
+const isMatched=c=>!!(c&&hiburConfigLoaded&&c.famLiked&&c.cgLiked&&(requireApproval?c.approved===true:c.approved!==false));
 function subscribeFamConns(){
   if(!connCol()||!me)return; if(connUnsub2)connUnsub2();
   connUnsub2=connCol().where("famId","==",me.id).onSnapshot(snap=>{
@@ -797,12 +806,16 @@ function showMatchModal(w){
   renderNav();
 }
 function playVideo(id){const w=cgById(id)||(connFor(id)||{}).cg;if(!w)return;
-  const isDirect=/\.(mp4|webm|mov)(\?|$)/i.test(w.video||"")||/res\.cloudinary\.com/.test(w.video||"");
+  // esc() only HTML-escapes — it does not stop a javascript: URL from executing when the
+  // fallback <a href> is clicked. Only ever render an https:// URL; anything else (including
+  // data:/javascript: schemes) is treated as if no video were set.
+  const isHttps=/^https:\/\//i.test(w.video||"");
+  const isDirect=isHttps&&(/\.(mp4|webm|mov)(\?|$)/i.test(w.video)||/^https:\/\/res\.cloudinary\.com\//i.test(w.video));
   $("#modalRoot").innerHTML=`<div class="scrim" onclick="if(event.target===this)this.remove()"><div class="modal" style="max-width:400px">
     <h3 style="margin-bottom:12px">סרטון היכרות — ${esc(w.name)}</h3>
-    ${w.video?(isDirect
+    ${isHttps?(isDirect
       ?`<video src="${esc(w.video)}" controls autoplay playsinline style="width:100%;border-radius:14px;margin-bottom:14px;background:#000"></video>`
-      :`<a href="${esc(w.video)}" target="_blank" class="big-btn cool" style="margin-bottom:14px">${svg(I.play,18)} פתח/י את הסרטון</a>`)
+      :`<a href="${esc(w.video)}" target="_blank" rel="noopener noreferrer" class="big-btn cool" style="margin-bottom:14px">${svg(I.play,18)} פתח/י את הסרטון</a>`)
       :`<p style="margin-bottom:14px">${esc(w.name)} עדיין לא העלה/תה סרטון היכרות.</p>`}
     <button class="big-btn" style="background:var(--paper);border:1.5px solid var(--line);box-shadow:none;color:var(--ink-2)" onclick="$('#modalRoot').innerHTML=''">סגור</button>
   </div></div>`;
@@ -924,8 +937,8 @@ function renderChatThread(w){
       <button class="back" onclick="go('main');switchTab('chats')">→</button>
       ${avEl(w)}
       <div class="who"><b>${esc(w.name)} ${esc(w.lastName||"")}</b><span>מקוון/ת</span></div>
-      ${c?`<a class="wa" href="${jitsiLink(c._id)}" target="_blank" title="שיחת וידאו" style="color:var(--anchor)">${svg(I.video,20)}</a>`:""}
-      ${phone?`<a class="wa" href="${waLink(phone)}" target="_blank" title="פתח בוואטסאפ">${svgF(I.wa,22)}</a>`:""}
+      ${c?`<a class="wa" href="${jitsiLink(c._id)}" target="_blank" rel="noopener noreferrer" title="שיחת וידאו" style="color:var(--anchor)">${svg(I.video,20)}</a>`:""}
+      ${phone?`<a class="wa" href="${waLink(phone)}" target="_blank" rel="noopener noreferrer" title="פתח בוואטסאפ">${svgF(I.wa,22)}</a>`:""}
     </div>
     <div class="ct-body" id="ctBody">
       ${msgs.length?msgs.map(m=>bubble(m)).join(""):`<div class="wa-note">זו תחילת השיחה עם ${esc(w.name)}. אפשר גם לפתוח וואטסאפ בכפתור שלמעלה.</div>`}
@@ -953,6 +966,7 @@ function guessNonHebrewLang(w){
 async function sendMsg(){
   const inp=$("#ctInput");const t=inp.value.trim();if(!t)return;
   const c=connFor(chatId);if(!c||!connCol()){toast("אין חיבור");return;}
+  if(!isMatched(c)){toast("ההתאמה כבר לא פעילה","err");go("main");switchTab("chats");return;}
   inp.value="";
   const w=cgById(chatId)||c.cg||{name:"מטפל/ת"};
   const msg={from:"fam",text:t,at:now()};
