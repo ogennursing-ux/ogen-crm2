@@ -731,10 +731,14 @@ function subscribeFamConns(){
 
 /* ---------- WhatsApp bridge (Netlify Functions backend; no-op until Meta credentials are set there) ---------- */
 const WA_BRIDGE_URL="https://hibur-wa-bridge.netlify.app/.netlify/functions";
-function bridgeToWhatsapp(phone,text){
-  if(!phone||!text)return;
-  fetch(WA_BRIDGE_URL+"/wa-send",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({toPhone:phone,text})}).catch(()=>{}); // best-effort, never blocks the in-app chat
+async function bridgeToWhatsapp(phone,text,connId){
+  if(!phone||!text||!connId)return;
+  try{
+    const idToken=await firebase.auth().currentUser.getIdToken();
+    fetch(WA_BRIDGE_URL+"/wa-send",{method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+idToken},
+      body:JSON.stringify({toPhone:phone,text,connId})}).catch(()=>{}); // best-effort, never blocks the in-app chat
+  }catch(e){console.warn("bridgeToWhatsapp",e);}
 }
 
 /* ---------- Gemini AI (shared key across family+caregiver apps, same origin) ---------- */
@@ -957,7 +961,7 @@ async function sendMsg(){
   connCol().doc(c._id).set({msgs:AU(msg),updatedAt:now()},{merge:true}).catch(e=>console.warn(e));
   c.msgs=(c.msgs||[]).concat(msg); readAt[c._id]=now();
   renderChatThread(w);
-  const waPhone=(c.cg&&c.cg.phone)||w.phone; if(waPhone)bridgeToWhatsapp(waPhone,msg.translated||t);
+  const waPhone=(c.cg&&c.cg.phone)||w.phone; if(waPhone)bridgeToWhatsapp(waPhone,msg.translated||t,c._id);
 }
 
 /* ---------- PROFILE (self) ---------- */
