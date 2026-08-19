@@ -4,7 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0A2733">
-<title>עוגן CRM — מערכת השמה</title>
+<title>השמה בקליק — עוגן סיעוד</title>
+<link rel="icon" type="image/png" sizes="192x192" href="assets/icon-hashama-192.png">
+<link rel="icon" type="image/png" sizes="64x64" href="assets/icon-hashama-64.png">
+<link rel="apple-touch-icon" href="assets/icon-hashama-192.png">
 <link rel="manifest" href="manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -54,9 +57,7 @@ a{color:var(--sea-500);text-decoration:none}
 #lock{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;
   background:radial-gradient(120% 120% at 80% 0%,var(--sea-900),var(--sea-950));color:#fff}
 .lock-card{width:min(92vw,380px);text-align:center;padding:8px}
-.lock-mark{width:74px;height:74px;margin:0 auto 20px;display:grid;place-items:center;
-  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);border-radius:22px}
-.lock-mark svg{width:40px;height:40px}
+.lock-logo{width:min(78vw,280px);height:auto;display:block;margin:0 auto 18px}
 .lock-card h1{color:#fff;font-size:26px;font-weight:800;margin-bottom:4px}
 .lock-card p{color:rgba(255,255,255,.6);font-size:14px;margin-bottom:26px}
 .pin-dots{display:flex;gap:14px;justify-content:center;margin-bottom:26px}
@@ -80,8 +81,8 @@ a{color:var(--sea-500);text-decoration:none}
 .rail{width:var(--rail);flex:none;background:var(--sea-950);display:flex;flex-direction:column;
   align-items:center;padding:16px 0;gap:6px;z-index:40}
 .rail .brand{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;margin-bottom:14px;
-  background:linear-gradient(150deg,var(--anchor),var(--sea-500))}
-.rail .brand svg{width:26px;height:26px}
+  background:#fff;box-shadow:0 1px 3px rgba(10,39,51,.18)}
+.rail .brand img{width:38px;height:38px;object-fit:contain;display:block}
 .rail nav{display:flex;flex-direction:column;gap:4px;width:100%;align-items:center;flex:1}
 .rail button.nav{width:56px;height:52px;border-radius:14px;display:flex;flex-direction:column;align-items:center;
   justify-content:center;gap:3px;color:rgba(255,255,255,.55);position:relative;transition:.14s}
@@ -389,11 +390,7 @@ table.tbl tr:hover td{background:var(--mist)}
 <!-- ===================== LOCK ===================== -->
 <div id="lock">
   <div class="lock-card">
-    <div class="lock-mark">
-      <svg viewBox="0 0 24 24" fill="none" stroke="#E9B44C" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="5" r="2.5"/><path d="M12 7.5V21M5 12H3s0 6 9 9c9-3 9-9 9-9h-2M5 12a7 7 0 0 0 14 0"/></svg>
-    </div>
-    <h1>עוגן CRM</h1>
+    <img src="assets/logo-hashama.png" alt="השמה בקליק" class="lock-logo">
     <p>מערכת ההשמה — בחרו שם והזינו סיסמה</p>
     <select id="loginName"
       style="width:100%;height:54px;border-radius:14px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);color:#fff;text-align:center;font-size:16px;padding:0 16px;margin-bottom:12px">
@@ -410,9 +407,8 @@ table.tbl tr:hover td{background:var(--mist)}
 <!-- ===================== APP ===================== -->
 <div id="app" class="hidden">
   <aside class="rail">
-    <div class="brand">
-      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="5" r="2.5"/><path d="M12 7.5V21M5 12H3s0 6 9 9c9-3 9-9 9-9h-2M5 12a7 7 0 0 0 14 0"/></svg>
+    <div class="brand" title="השמה בקליק">
+      <img src="assets/icon-hashama-192.png" alt="השמה בקליק">
     </div>
     <nav id="nav"></nav>
     <div class="spacer"></div>
