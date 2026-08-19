@@ -559,7 +559,17 @@ async function doLogin(){
   users[id]=u; saveUsersLocal();
   localStorage.setItem(SESS_KEY,id); me=u; enterApp();
 }
-function logout(){localStorage.removeItem(SESS_KEY);me=null;try{firebase.auth().signOut();}catch(e){}go("welcome");}
+function logout(){
+  // Listeners were never torn down on logout — a stale snapshot could fire after me=null
+  // (throwing inside the callback) or, on a shared device, apply the previous account's
+  // data onto whoever signs in next.
+  if(unsub){try{unsub();}catch(e){}unsub=null;}
+  if(connUnsub2){try{connUnsub2();}catch(e){}connUnsub2=null;}
+  if(hiburConfigUnsub){try{hiburConfigUnsub();}catch(e){}hiburConfigUnsub=null;}
+  clearTimeout(cloudTimer);
+  localStorage.removeItem(SESS_KEY);me=null;famConns=[];matchedIds=[];
+  try{firebase.auth().signOut();}catch(e){}go("welcome");
+}
 
 /* ============================================================
    APP SHELL
@@ -568,12 +578,14 @@ const TABS=[["discover","גלה",I.discover],["likes","לייקים",I.likes],["
 function enterApp(){
   caregivers=loadCaregivers();
   buildDeck();
-  subscribeCloud(); subscribeFamConns(); loadHiburConfig();
+  subscribeCloud(); subscribeFamConns(); loadHiburConfig(); retryPendingLikes();
   go("main"); switchTab("discover");
   fetchCloudCaregivers().then(cloud=>{
     if(!cloud.length)return;
-    const ids=new Set(caregivers.map(c=>c.id));
-    cloud.forEach(c=>{if(!ids.has(c.id))caregivers.unshift(c);}); // real registered caregivers first
+    // Was add-only for unknown ids — an existing local caregiver's phone/photo/status
+    // never got refreshed from the cloud, so cached data could go stale indefinitely.
+    const byId=new Map(caregivers.map(c=>[c.id,c]));
+    cloud.forEach(c=>{ if(byId.has(c.id))Object.assign(byId.get(c.id),c); else caregivers.unshift(c); });
     buildDeck(); if(curTab==="discover")renderDiscover();
   });
 }
@@ -710,10 +722,11 @@ const connFor=cgId=>famConns.find(c=>c.cgId===cgId);
    Starts fail-closed (nothing counts as matched) until the real setting has actually
    loaded — the old default (requireApproval=false) meant a mutual like briefly counted
    as a full match, exposing contact/chat, in the window before this config arrived. */
-let requireApproval=true, hiburConfigLoaded=false;
+let requireApproval=true, hiburConfigLoaded=false, hiburConfigUnsub=null;
 function loadHiburConfig(){
   if(!fdb)return;
-  fdb.collection("hibur_config").doc("settings").onSnapshot(snap=>{
+  if(hiburConfigUnsub){hiburConfigUnsub();hiburConfigUnsub=null;} // was never retained — leaked one listener per login
+  hiburConfigUnsub=fdb.collection("hibur_config").doc("settings").onSnapshot(snap=>{
     requireApproval=!!(snap.data()&&snap.data().requireApproval);
     hiburConfigLoaded=true;
     if($("#main").classList.contains("on"))switchTab(curTab);
@@ -781,14 +794,43 @@ async function explainMatchAI(lead,reasons){
     );
   }catch(e){console.warn("explainMatch",e);return null;}
 }
-function familyLike(w){
-  if(!connCol())return;
-  connCol().doc(me.id+"__"+w.id).set({famId:me.id,cgId:w.id,
+// A like was fire-and-forget: the card gets swiped away and locally marked liked
+// regardless of whether the Firestore write actually lands. Offline (or a transient
+// error), the write silently never happened — the caregiver was never notified and no
+// match could ever form, with no sign anything went wrong. Failed writes now queue for
+// retry (on reconnect and on next app open) instead of being dropped.
+const PENDING_LIKES_KEY="hb_pendingLikes";
+function loadPendingLikes(){try{return JSON.parse(localStorage.getItem(PENDING_LIKES_KEY)||"[]");}catch(e){return [];}}
+function savePendingLikes(list){try{localStorage.setItem(PENDING_LIKES_KEY,JSON.stringify(list));}catch(e){}}
+function familyLikePayload(w){
+  return {famId:me.id,cgId:w.id,
     fam:{name:me.name,city:me.city,phone:me.phone||"",gender:me.family.gender,budget:me.family.offeredSalary,
       needHoist:me.family.needsHoist,needDementia:me.family.hasDementia,needDiapers:me.family.needsDiapers,req:me.family.requirements},
     cg:{name:w.name,lastName:w.lastName||"",city:w.city||"",nationality:w.nationality||"",photo:w.photo||"",age:w.age||"",phone:w.phone||""},
-    famLiked:true,updatedAt:now()},{merge:true}).catch(e=>console.warn("like",e));
+    famLiked:true,updatedAt:now()};
 }
+function familyLike(w){
+  if(!connCol()){queuePendingLike(w);return;}
+  connCol().doc(me.id+"__"+w.id).set(familyLikePayload(w),{merge:true})
+    .catch(e=>{console.warn("like",e);queuePendingLike(w);});
+}
+function queuePendingLike(w){
+  const list=loadPendingLikes();
+  if(!list.some(x=>x.cgId===w.id&&x.famId===me.id))list.push({famId:me.id,cgId:w.id,w});
+  savePendingLikes(list);
+}
+async function retryPendingLikes(){
+  if(!connCol())return;
+  const list=loadPendingLikes(); if(!list.length)return;
+  const remaining=[];
+  for(const item of list){
+    if(item.famId!==me.id){remaining.push(item);continue;} // belongs to a different signed-in account
+    try{await connCol().doc(item.famId+"__"+item.cgId).set(familyLikePayload(item.w),{merge:true});}
+    catch(e){remaining.push(item);}
+  }
+  savePendingLikes(remaining);
+}
+window.addEventListener("online",()=>{if(me)retryPendingLikes();});
 async function fetchCloudCaregivers(){
   if(!fdb)return [];
   try{const s=await fdb.collection("hibur_cg").get();

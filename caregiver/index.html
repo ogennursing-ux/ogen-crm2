@@ -289,7 +289,13 @@ async function doLogin(){
     try{await cgDoc(id).set(d);}catch(e){} }
   me=d; localStorage.setItem(SESS,id); enterApp();
 }
-function logout(){localStorage.removeItem(SESS);if(connUnsub)connUnsub();me=null;try{firebase.auth().signOut();}catch(e){}go("welcome");}
+function logout(){
+  localStorage.removeItem(SESS);
+  if(connUnsub){connUnsub();connUnsub=null;}
+  if(hiburConfigUnsub){hiburConfigUnsub();hiburConfigUnsub=null;}
+  me=null;conns=[];chatConn=null;
+  try{firebase.auth().signOut();}catch(e){}go("welcome");
+}
 function saveMe(){
   // Was fire-and-forget — the try/catch only guarded synchronous construction of the
   // write, never the write itself, so callers always showed a success toast even when
@@ -314,10 +320,11 @@ function switchTab(t){curTab=t;$("#topTitle").textContent=TABS.find(x=>x[0]===t)
 const connId=c=>c.famId+"__"+c.cgId;
 // Fail-closed until the real config has loaded — see family/index.html for the full
 // rationale (was: requireApproval=false let a mutual like briefly count as matched).
-let requireApproval=true, hiburConfigLoaded=false;
+let requireApproval=true, hiburConfigLoaded=false, hiburConfigUnsub=null;
 function loadHiburConfig(){
   if(!fdb)return;
-  fdb.collection("hibur_config").doc("settings").onSnapshot(snap=>{
+  if(hiburConfigUnsub){hiburConfigUnsub();hiburConfigUnsub=null;} // was never retained — leaked one listener per login
+  hiburConfigUnsub=fdb.collection("hibur_config").doc("settings").onSnapshot(snap=>{
     requireApproval=!!(snap.data()&&snap.data().requireApproval);
     hiburConfigLoaded=true;
     if($("#main").classList.contains("on"))switchTab(curTab);
@@ -429,6 +436,7 @@ $("#docInput").onchange=async e=>{
   toast("מעלה מסמך…");
   try{
     const [uploadRes,b64]=await Promise.all([uploadToCloudinary(f),blobToB64(f)]);
+    if(!me)return; // logged out while the upload was in flight
     me.idDoc=uploadRes.secure_url; await saveMe();
     if(hasAI()){
       toast("בודק מסמך…");
@@ -440,8 +448,10 @@ $("#docInput").onchange=async e=>{
         );
         const m=raw.match(/\{[\s\S]*\}/);
         const d=m?JSON.parse(m[0]):{ok:false,reason:"לא ניתן היה לנתח את המסמך אוטומטית"};
+        if(!me)return;
         me.idDocCheck={ok:!!d.ok,reason:d.reason||"",checkedAt:nowT()};
-      }catch(err){me.idDocCheck={ok:false,reason:"שגיאה בבדיקה האוטומטית — יבדק ידנית",checkedAt:nowT()};console.warn(err);}
+      }catch(err){if(!me)return;me.idDocCheck={ok:false,reason:"שגיאה בבדיקה האוטומטית — יבדק ידנית",checkedAt:nowT()};console.warn(err);}
+      if(!me)return;
       await saveMe();
     }
     toast("המסמך נשמר ✓"); renderProfile();
@@ -482,6 +492,7 @@ $("#photoInput").onchange=e=>{const f=e.target.files[0];if(!f)return;
     cv.toBlob(async blob=>{
       toast("מעלה תמונה…");
       try{const res=await uploadToCloudinary(blob);
+        if(!me)return; // logged out while the upload was in flight
         me.photo=res.secure_url; const ok=await saveMe(); toast(ok?"התמונה הועלתה ✓":"התמונה הועלתה אך השמירה נכשלה — נסו שוב",ok?"ok":"err"); renderProfile();
       }catch(err){toast("שגיאה בהעלאה — נסו שוב");console.warn(err);}
     },"image/jpeg",0.82);
@@ -502,6 +513,7 @@ $("#videoInput").onchange=async e=>{
   $("#modalRoot").innerHTML=`<div class="scrim"><div class="modal"><div class="mi">${svg(I.video,28)}</div><h3>מעלה סרטון…</h3><p id="vidPct" style="font-size:22px;font-weight:800;color:var(--anchor)">0%</p></div></div>`;
   try{
     const res=await uploadToCloudinary(f,{onProgress:p=>{const el=$("#vidPct");if(el)el.textContent=p+"%";}});
+    if(!me){$("#modalRoot").innerHTML="";return;} // logged out while the upload was in flight
     me.video=res.secure_url; const ok=await saveMe(); $("#modalRoot").innerHTML=""; toast(ok?"הסרטון הועלה ✓":"הועלה אך השמירה נכשלה — נסו שוב",ok?"ok":"err"); renderProfile();
   }catch(err){ $("#modalRoot").innerHTML=""; toast("שגיאה בהעלאת הסרטון — נסו שוב"); console.warn(err); }
   e.target.value="";
