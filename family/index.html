@@ -1029,9 +1029,31 @@ function resetSeen(){me.passed=[];buildDeck();saveUsers();toast("אופס — כ
 function init(){
   loadUsers(); initCloud(); fillSignupForm();
   const sid=localStorage.getItem(SESS_KEY);
-  if(sid&&users[sid]){me=users[sid];enterApp();return;}
-  if(sid){ fetchCloud(sid).then(u=>{ if(u){users[sid]=u;me=u;saveUsersLocal();enterApp();}else go("welcome"); }); return; }
-  go("welcome");
+  if(!sid){ go("welcome"); return; }
+  // Wait for Firebase Auth's own restored session before touching Firestore —
+  // reading based on the localStorage id alone (the old behavior) raced
+  // onAuthStateChanged and caused intermittent permission-denied on cold reload.
+  firebase.auth().onAuthStateChanged(async user=>{
+    if(user && user.uid==="fam_"+sid){
+      if(users[sid]){me=users[sid];enterApp();return;}
+      const u=await fetchCloud(sid);
+      if(u){users[sid]=u;me=u;saveUsersLocal();enterApp();}else go("welcome");
+      return;
+    }
+    // Firebase's persisted session didn't restore (expired/cleared) — the
+    // family/name pair is still known locally, so re-authenticate silently
+    // instead of bouncing the user back to a login screen.
+    const cachedName=(users[sid]&&users[sid].name)||"";
+    if(!cachedName){ go("welcome"); return; }
+    try{
+      const auth=await signInFamily(sid,cachedName,"login");
+      if(auth.token){
+        const u=users[sid]||await fetchCloud(sid);
+        if(u){users[sid]=u;me=u;saveUsersLocal();enterApp();return;}
+      }
+    }catch(e){console.warn("session restore failed",e);}
+    go("welcome");
+  });
 }
 init();
 </script>

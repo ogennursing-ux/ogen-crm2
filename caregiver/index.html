@@ -580,8 +580,24 @@ async function sendMsg(){const inp=$("#ctInput");const t=inp.value.trim();if(!t|
 async function init(){
   if(localStorage.getItem("hbcg_consent")==="1"){const c=$("#li-consent");if(c)c.checked=true;}
   const sid=localStorage.getItem(SESS);
-  if(sid&&fdb){ try{const s=await cgDoc(sid).get();if(s.exists){me=s.data();enterApp();return;}}catch(e){} }
-  go("welcome");
+  if(!sid||!fdb){ go("welcome"); return; }
+  // Wait for Firebase Auth's own restored session before reading Firestore —
+  // reading based on the localStorage id alone raced onAuthStateChanged and
+  // caused intermittent permission-denied on cold reload.
+  firebase.auth().onAuthStateChanged(async user=>{
+    if(!(user && user.uid==="cg_"+sid)){
+      // Session didn't restore (expired/cleared) — re-authenticate silently,
+      // same call doLogin() makes, before touching Firestore.
+      try{
+        const r=await fetch(AUTH_CAREGIVER_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:sid})});
+        const auth=await r.json();
+        if(auth.token) await firebase.auth().signInWithCustomToken(auth.token);
+        else{ go("welcome"); return; }
+      }catch(e){console.warn("session restore failed",e); go("welcome"); return;}
+    }
+    try{const s=await cgDoc(sid).get();if(s.exists){me=s.data();enterApp();return;}}catch(e){console.warn(e);}
+    go("welcome");
+  });
 }
 init();
 </script>
