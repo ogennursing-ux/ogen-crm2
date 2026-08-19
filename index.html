@@ -2614,14 +2614,20 @@ function initLock(){
 }
 const AUTH_STAFF_URL="https://hibur-wa-bridge.netlify.app/.netlify/functions/auth-staff";
 const WA_START_FLOW_URL="https://hibur-wa-bridge.netlify.app/.netlify/functions/wa-start-flow";
-async function sendWaQuestionnaire(flow,phone){
+async function sendWaQuestionnaire(flow,phone,force){
   if(!phone){toast("אין מספר טלפון","err");return;}
   try{
     const idToken=await firebase.auth().currentUser.getIdToken();
     toast("שולח שאלון בווטסאפ…");
-    const r=await fetch(WA_START_FLOW_URL,{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({idToken,phone,flow})});
+    const r=await fetch(WA_START_FLOW_URL,{method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+idToken},
+      body:JSON.stringify({phone,flow,force:!!force})});
     const data=await r.json();
+    if(data.error==="session-in-progress"){
+      if(confirm("יש כבר שיחת ווטסאפ פעילה עם המספר הזה ("+data.currentFlow+"). להתחיל שיחה חדשה בכל זאת?"))
+        return sendWaQuestionnaire(flow,phone,true);
+      return;
+    }
     if(data.ok&&data.sent&&data.sent.skipped)toast("הבוט עדיין לא מוגדר (ממתין לאימות Meta) — השאלון לא נשלח בפועל","err");
     else if(data.ok&&data.sent&&data.sent.ok)toast("השאלון נשלח בווטסאפ ✓","ok");
     else if(data.error==="not-staff")toast("רק אנשי צוות יכולים לשלוח שאלון","err");
