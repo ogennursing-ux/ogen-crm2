@@ -1388,6 +1388,7 @@ function rejectCard(n){
 }
 function proposeWorker(leadId,workerId){
   const l=leadById(leadId),w=workerById(workerId); if(!l||!w)return;
+  if(l.status.startsWith("סגור")){toast("הליד סגור — אי אפשר להציע מועמדים חדשים","err");return;}
   l.proposedWorkerIds=l.proposedWorkerIds||[]; if(!l.proposedWorkerIds.includes(workerId))l.proposedWorkerIds.push(workerId);
   if(l.status==="חדש"||l.status==="בטיפול")l.status="הוצע עובד";
   logActivity(l,`הוצע/ה ${w.name} ${w.lastName} (ניקוד ${scoreMatch(l,w)?.score||"—"})`);
@@ -2404,7 +2405,7 @@ function ivSubmit(){
 async function ivSubmitAI(){
   ivTyping(true);$("#ivStatus").textContent="מקלידה…";
   let reply;
-  try{ reply=await callInterviewAI(ivState.messages,ivState.system); }
+  try{ reply=await callInterviewAI(ivState.messages,ivState.system,ivState.lang); }
   catch(e){ // graceful fallback → scripted question — keep whatever the candidate just typed instead of discarding it
     ivTyping(false);$("#ivStatus").textContent="מקוונת"; ivState.mode="script";
     const lastUser=[...ivState.messages].reverse().find(m=>m.role==="user");
@@ -2612,9 +2613,12 @@ async function callAI(messages,system){
 // bridge used for WhatsApp. Falls back to the direct client call when a local key IS set
 // (e.g. a coordinator previewing the interview from inside the CRM).
 const AI_PROXY_URL="https://hibur-wa-bridge.netlify.app/.netlify/functions/ai-interview";
-async function callInterviewAI(messages,system){
+async function callInterviewAI(messages,system,lang){
   if(hasAI()) return callAI(messages,system);
-  const r=await fetch(AI_PROXY_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages,system})});
+  // The server proxy now owns the interview system prompt itself (keyed by language only)
+  // instead of trusting whatever "system" text the client sent — a caller-controlled
+  // prompt on a server-key-funded endpoint was both a prompt-injection and a free-proxy risk.
+  const r=await fetch(AI_PROXY_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages,lang})});
   const data=await r.json();
   if(!r.ok||data.error||!data.text) throw new Error("ai-proxy-failed");
   return data.text.trim();
