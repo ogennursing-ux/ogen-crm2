@@ -1626,10 +1626,13 @@ async function loadHiburDigest(){
     const matchesToday=conns.filter(c=>c.famLiked&&c.cgLiked&&(c.updatedAt||0)>=cutoff);
     const allMatches=conns.filter(c=>c.famLiked&&c.cgLiked);
     const pending=conns.filter(c=>c.famLiked&&!c.cgLiked);
-    const msgsToday=conns.reduce((n,c)=>n+((c.msgs||[]).filter(m=>(m.at||0)>=cutoff).length),0);
+    // Chat messages moved to a per-conn messages/ subcollection; the parent keeps a lightweight
+    // summary. Count chats that had a message today from lastAt (millis) — cheap, no per-message
+    // fan-out read on the dashboard.
+    const chatsActiveToday=conns.reduce((n,c)=>n+(((c.lastAt||0)>=cutoff)?1:0),0);
     const stats=[
       ["משפחות חדשות היום",newFams.length],["מטפלים חדשים היום",newCgs.length],
-      ["מאצ'ים היום",matchesToday.length],["הודעות היום",msgsToday],
+      ["מאצ'ים היום",matchesToday.length],["שיחות פעילות היום",chatsActiveToday],
       ["סה״כ מאצ'ים פעילים",allMatches.length],["ממתינים לתגובת מטפל",pending.length],
     ];
     const statsHtml=`<div class="d-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
@@ -1742,11 +1745,11 @@ async function loadHiburChats(){
   const fdb2=initHiburRead(); if(!fdb2){box.innerHTML="";return;}
   try{
     const connsSnap=await fdb2.collection("hibur_conn").get();
-    const active=connsSnap.docs.map(d=>Object.assign({_id:d.id},d.data())).filter(c=>(c.msgs||[]).length).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+    const active=connsSnap.docs.map(d=>Object.assign({_id:d.id},d.data())).filter(c=>(c.msgCount||0)>0).sort((a,b)=>(b.lastAt||b.updatedAt||0)-(a.lastAt||a.updatedAt||0));
     if(!active.length){box.innerHTML=`<div class="empty" style="padding:16px">${svg(I.chat,32)}<h3>אין שיחות פעילות עדיין</h3></div>`;return;}
     box.innerHTML=active.map(c=>`<div class="urg" style="align-items:flex-start" id="chatrow-${c._id}">
       <div class="ic" style="background:var(--ok-soft);color:var(--ok)">${svg(I.chat,16)}</div>
-      <div class="tx"><b>${esc((c.fam&&c.fam.name)||"משפחה")} ↔ ${esc((c.cg&&c.cg.name)||"מטפל/ת")}</b><span>${(c.msgs||[]).length} הודעות</span>
+      <div class="tx"><b>${esc((c.fam&&c.fam.name)||"משפחה")} ↔ ${esc((c.cg&&c.cg.name)||"מטפל/ת")}</b><span>${c.msgCount||0} הודעות</span>
         <div id="chatsummary-${c._id}" style="margin-top:6px"></div></div>
       ${hasAI()?`<button class="btn sm" onclick="summarizeChat('${c._id}')">✨ סכם</button>`:""}
     </div>`).join("");
@@ -1758,8 +1761,10 @@ async function summarizeChat(connId){
   box.innerHTML=`<span style="font-size:12px;color:var(--ink-3)">מנתח…</span>`;
   try{
     const fdb2=initHiburRead();
-    const snap=await fdb2.collection("hibur_conn").doc(connId).get();
-    const c=snap.data(); const msgs=c&&c.msgs||[];
+    // Chat transcript now lives in hibur_conn/{id}/messages (Phase 3). Pull it ordered, capped —
+    // one subcollection read per summarize click (not on every dashboard load).
+    const msgSnap=await fdb2.collection("hibur_conn").doc(connId).collection("messages").orderBy("at").limit(300).get();
+    const msgs=msgSnap.docs.map(d=>d.data());
     const transcript=msgs.map(m=>(m.from==="fam"?"משפחה":"מטפל/ת")+": "+(m.translated||m.text)).join("\n");
     const text=await callAI([{role:"user",content:
       `תמלול שיחה בין משפחה למטפל/ת בפלטפורמת השמה:\n${transcript}\n\n`+

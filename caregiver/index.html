@@ -200,7 +200,26 @@ async function uploadToCloudinary(fileOrBlob,{onProgress}={}){
   });
 }
 const connCol=()=>fdb.collection("hibur_conn");
-const AU=x=>firebase.firestore.FieldValue.arrayUnion(x);
+// Chat messages live in a subcollection (audit P1: were one growing array inside the conn
+// doc — toward Firestore's 1 MiB cap, no pagination, client-timestamp ordering). Each is its
+// own doc with a serverTimestamp; the parent conn keeps only a small {lastText,lastFrom,
+// lastAt,msgCount} summary so lists/badges don't need to load the messages.
+const msgsCol=cid=>connCol().doc(cid).collection("messages");
+const SVT=()=>firebase.firestore.FieldValue.serverTimestamp();
+const INC=n=>firebase.firestore.FieldValue.increment(n);
+const msgTime=m=>(m&&m.at&&m.at.toMillis)?m.at.toMillis():((m&&(m.clientAt||m.at))||Date.now());
+let chatMsgUnsub=null, chatMsgs=[];
+function stopChatMsgs(){ if(chatMsgUnsub){try{chatMsgUnsub();}catch(e){}chatMsgUnsub=null;} chatMsgs=[]; }
+function subscribeChatMsgs(cid){
+  stopChatMsgs();
+  chatMsgUnsub=msgsCol(cid).orderBy("at").limitToLast(300).onSnapshot(snap=>{
+    chatMsgs=snap.docs.map(d=>d.data());
+    if($("#chat").classList.contains("on")&&chatConn&&chatConn._id===cid){
+      const b=$("#ctBody");
+      if(b){ b.innerHTML=chatMsgs.length?chatMsgs.map(bubble).join(""):`<div style="text-align:center;color:var(--ink-3);font-size:12px;padding:8px">תחילת השיחה</div>`; b.scrollTop=b.scrollHeight; }
+    }
+  },e=>console.warn("msgs sub",e));
+}
 
 /* ---------- WhatsApp bridge (Netlify Functions backend; no-op until Meta credentials are set there) ---------- */
 const WA_BRIDGE_URL="https://hibur-wa-bridge.netlify.app/.netlify/functions";
@@ -308,6 +327,7 @@ async function doLogin(){
   me=d; localStorage.setItem(SESS,id); enterApp();
 }
 function logout(){
+  stopChatMsgs();
   localStorage.removeItem(SESS);
   if(connUnsub){connUnsub();connUnsub=null;}
   if(hiburConfigUnsub){hiburConfigUnsub();hiburConfigUnsub=null;}
@@ -327,11 +347,13 @@ const TABS=[["profile","פרופיל",I.user],["requests","פניות",I.heart],
 function enterApp(){subscribeConns();loadHiburConfig();go("main");switchTab(me.name?"requests":"profile");}
 function renderNav(){
   const pend=conns.filter(c=>c.cgId===me.id&&c.famLiked&&!c.cgLiked).length;
-  const unread=conns.filter(isMatched).reduce((n,c)=>n+(c.msgs||[]).filter(m=>m.from==="fam"&&!(me.readAt&&m.at<=me.readAt[c.id||connId(c)])).length,0);
+  // Unread = matched conns whose last message came from the family after we last opened it.
+  // Uses only the parent-doc summary, so no message docs are loaded for the badge.
+  const unread=conns.filter(isMatched).filter(c=>c.lastFrom==="fam"&&(c.lastAt||0)>((me.readAt&&me.readAt[c._id])||0)).length;
   $("#nav").innerHTML=TABS.map(([id,label,icon])=>`<button class="${curTab===id?"on":""}" data-tab="${id}">${curTab===id?svgF(icon,23):svg(icon,23)}<span>${label}</span>${id==="requests"&&pend?`<i class="dot">${pend}</i>`:""}</button>`).join("");
   $$("#nav [data-tab]").forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
 }
-function switchTab(t){curTab=t;$("#topTitle").textContent=TABS.find(x=>x[0]===t)[1];renderNav();
+function switchTab(t){stopChatMsgs();curTab=t;$("#topTitle").textContent=TABS.find(x=>x[0]===t)[1];renderNav();
   ({profile:renderProfile,requests:renderRequests,matches:renderMatches,chats:renderChats}[t])();}
 
 /* ---------- connections (shared with family app) ---------- */
@@ -577,26 +599,31 @@ function renderMatches(){const tab=$("#tab");tab.className="tab pad";const ms=ma
   if(!ms.length){tab.innerHTML=emptyState(I.match,"אין מאצ'ים עדיין","כשתשיב/י בחיוב לפנייה של משפחה — היא תופיע כאן");return;}
   tab.innerHTML=`<div class="list-head">${ms.length} מאצ'ים</div>`+ms.map(c=>rowFam(c,`onclick="openChat('${c._id}')"`,`<button class="big-btn cool" style="width:auto;height:38px;padding:0 16px;font-size:13px">שוחח/י 💬</button>`)).join("");
 }
-function renderChats(){const tab=$("#tab");tab.className="tab pad";const cs=matchedConns().filter(c=>(c.msgs||[]).length).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+function renderChats(){const tab=$("#tab");tab.className="tab pad";const cs=matchedConns().filter(c=>c.lastText||c.msgCount).sort((a,b)=>(b.lastAt||b.updatedAt||0)-(a.lastAt||a.updatedAt||0));
   if(!cs.length){tab.innerHTML=emptyState(I.chat,"אין שיחות עדיין","התחילו שיחה מתוך מאצ'");return;}
-  tab.innerHTML=`<div class="list-head">שיחות</div>`+cs.map(c=>{const lm=(c.msgs||[]).slice(-1)[0];
+  tab.innerHTML=`<div class="list-head">שיחות</div>`+cs.map(c=>{
+    const unread=c.lastFrom==="fam"&&(c.lastAt||0)>((me.readAt&&me.readAt[c._id])||0);
     return `<div class="list-row" onclick="openChat('${c._id}')"><div class="av">${esc((c.fam?.name||"?")[0])}</div>
-    <div class="m"><b>${esc(c.fam?.name||"משפחה")}</b><span>${esc(lm?lm.text:"")}</span></div>
-    <div style="text-align:center"><div style="font-size:11px;color:var(--ink-3)">${lm?timeStr(lm.at):""}</div></div></div>`;}).join("");
+    <div class="m"><b>${esc(c.fam?.name||"משפחה")}</b><span>${esc(c.lastText||"")}</span></div>
+    <div style="text-align:center"><div style="font-size:11px;color:var(--ink-3)">${c.lastAt?timeStr(c.lastAt):""}</div>${unread?`<span class="dot" style="position:static;display:inline-block;margin-top:4px">●</span>`:""}</div></div>`;}).join("");
 }
 function rowFam(c,attr,side){const f=c.fam||{};return `<div class="list-row" ${attr}><div class="av">${esc((f.name||"?")[0])}</div>
   <div class="m"><b>${esc(f.name||"משפחה")}</b><span>${esc(f.city||"")} · תקציב ${money(f.budget)}</span></div><div>${side||""}</div></div>`;}
 function emptyState(icon,h,p){return `<div class="empty"><div class="ic">${svg(icon,36)}</div><h3>${h}</h3><p>${p}</p></div>`;}
 
 /* ---------- CHAT ---------- */
-function openChat(cid){chatConn=conns.find(c=>c._id===cid);if(!chatConn)return;renderChat(chatConn);go("chat");}
-function renderChat(c){const f=c.fam||{};const msgs=c.msgs||[];
+function openChat(cid){
+  chatConn=conns.find(c=>c._id===cid);if(!chatConn)return;
+  me.readAt=me.readAt||{}; me.readAt[cid]=nowT(); saveMe();  // mark read
+  subscribeChatMsgs(cid); renderChat(chatConn); go("chat");
+}
+function renderChat(c){const f=c.fam||{};
   $("#chat").innerHTML=`
-    <div class="ct-head"><button class="back" onclick="go('main');switchTab('chats')">→</button>
+    <div class="ct-head"><button class="back" onclick="stopChatMsgs();go('main');switchTab('chats')">→</button>
       <div class="av" style="width:40px;height:40px;border-radius:50%;font-size:16px">${esc((f.name||"?")[0])}</div>
       <div class="who"><b>${esc(f.name||"משפחה")}</b><span>${esc(f.city||"")}</span></div>
       <a class="wa" style="margin-inline-start:auto;color:var(--anchor)" href="${jitsiLink(c._id)}" target="_blank" rel="noopener noreferrer" title="שיחת וידאו">${svg(I.video,20)}</a></div>
-    <div class="ct-body" id="ctBody">${msgs.length?msgs.map(bubble).join(""):`<div style="text-align:center;color:var(--ink-3);font-size:12px;padding:8px">תחילת השיחה עם ${esc(f.name||"המשפחה")}</div>`}</div>
+    <div class="ct-body" id="ctBody">${chatMsgs.length?chatMsgs.map(bubble).join(""):`<div style="text-align:center;color:var(--ink-3);font-size:12px;padding:8px">תחילת השיחה עם ${esc(f.name||"המשפחה")}</div>`}</div>
     <div class="ct-foot"><input id="ctInput" placeholder="הקלד/י הודעה…" onkeydown="if(event.key==='Enter')sendMsg()"><button class="send" onclick="sendMsg()">${svg(I.send,20)}</button></div>`;
   const b=$("#ctBody");b.scrollTop=b.scrollHeight;
 }
@@ -606,7 +633,7 @@ function bubble(m){
   const secondary=mine?m.translated:(m.translated?m.text:null);
   return `<div class="bub ${mine?"me":"them"}">${esc(primary)}
     ${secondary?`<div style="opacity:.7;font-size:11.5px;margin-top:5px;padding-top:5px;border-top:1px solid rgba(0,0,0,.12)">🌐 ${esc(secondary)}</div>`:""}
-    <time>${timeStr(m.at)}</time></div>`;
+    <time>${timeStr(msgTime(m))}</time></div>`;
 }
 async function sendMsg(){const inp=$("#ctInput");const t=inp.value.trim();if(!t||!chatConn)return;
   if(!isMatched(chatConn)){toast("ההתאמה כבר לא פעילה","err");go("main");switchTab("chats");return;}
@@ -614,14 +641,16 @@ async function sendMsg(){const inp=$("#ctInput");const t=inp.value.trim();if(!t|
   // translateMsg is in flight if the user switches to a different conversation, which used
   // to send the message to whatever conversation was open when the translation finished.
   inp.value="";
-  const msg={from:"cg",text:t,at:nowT()};
+  const msg={from:"cg",text:t,clientAt:nowT()};
   const tr=await translateMsg(t,"Hebrew");
   if(tr){msg.translated=tr;msg.translatedLang="עברית";}
-  // Await the write and reflect real success/failure instead of assuming it sent.
-  try{ await connCol().doc(targetConn._id).set({msgs:AU(msg),updatedAt:nowT()},{merge:true}); }
-  catch(e){ console.warn(e); toast("ההודעה לא נשלחה — נסו שוב","err"); inp.value=t; return; }
-  targetConn.msgs=(targetConn.msgs||[]).concat(msg);
-  if(chatConn===targetConn)renderChat(chatConn);
+  // Write the message to the subcollection (server-timestamped) and bump the parent summary.
+  // The open-chat listener re-renders from the subcollection, so no optimistic local append.
+  try{
+    await msgsCol(targetConn._id).add(Object.assign({},msg,{at:SVT()}));
+    await connCol().doc(targetConn._id).set({lastText:t,lastFrom:"cg",lastAt:nowT(),msgCount:INC(1),updatedAt:nowT()},{merge:true});
+    if(me.readAt){me.readAt[targetConn._id]=nowT();saveMe();}  // our own message counts as read
+  }catch(e){ console.warn(e); toast("ההודעה לא נשלחה — נסו שוב","err"); inp.value=t; return; }
   // Use targetConn (captured before the await), NOT the global chatConn — the user may have
   // switched conversations during translation, which would have sent to the wrong number.
   const waPhone=targetConn.fam&&targetConn.fam.phone; if(waPhone)bridgeToWhatsapp(waPhone,msg.translated||t,targetConn._id);

@@ -575,6 +575,7 @@ function logout(){
   if(unsub){try{unsub();}catch(e){}unsub=null;}
   if(connUnsub2){try{connUnsub2();}catch(e){}connUnsub2=null;}
   if(hiburConfigUnsub){try{hiburConfigUnsub();}catch(e){}hiburConfigUnsub=null;}
+  stopChatMsgs();
   clearTimeout(cloudTimer);
   localStorage.removeItem(SESS_KEY);me=null;famConns=[];matchedIds=[];
   try{firebase.auth().signOut();}catch(e){}go("welcome");
@@ -600,7 +601,9 @@ function enterApp(){
 }
 function renderNav(){
   const matches=famConns.filter(isMatched);
-  const unread=matches.reduce((n,c)=>n+(c.msgs||[]).filter(m=>m.from==="cg"&&m.at>(readAt[c._id]||0)).length,0);
+  // Unread = matched conns whose last message came from the caregiver after we last opened it
+  // (from the parent-doc summary — no message docs loaded for the badge).
+  const unread=matches.filter(c=>c.lastFrom==="cg"&&(c.lastAt||0)>(readAt[c._id]||0)).length;
   $("#nav").innerHTML=TABS.map(([id,label,icon])=>`
     <button class="${curTab===id?"on":""}" data-tab="${id}">
       ${curTab===id?svgF(icon,23):svg(icon,23)}<span>${label}</span>
@@ -609,7 +612,7 @@ function renderNav(){
     </button>`).join("");
   $$("#nav [data-tab]").forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
 }
-function switchTab(t){curTab=t;$("#topTitle").textContent=TABS.find(x=>x[0]===t)[1];renderNav();
+function switchTab(t){stopChatMsgs();curTab=t;$("#topTitle").textContent=TABS.find(x=>x[0]===t)[1];renderNav();
   ({discover:renderDiscover,likes:renderLikes,matches:renderMatches,chats:renderChats,profile:renderProfile}[t])();}
 
 /* ---------- DISCOVER (rounds of 5, per spec ב4) ---------- */
@@ -726,6 +729,25 @@ function decide(kind){
 let famConns=[], connUnsub2=null, readAt={}, matchedIds=[];
 const connCol=()=>fdb?fdb.collection("hibur_conn"):null;
 const AU=x=>firebase.firestore.FieldValue.arrayUnion(x);
+// Chat messages live in a subcollection (audit P1: were one growing array inside the conn
+// doc). Each is its own server-timestamped doc; the parent conn keeps only a small
+// {lastText,lastFrom,lastAt,msgCount} summary so lists/badges don't load the messages.
+const msgsCol=cid=>connCol()?connCol().doc(cid).collection("messages"):null;
+const SVT=()=>firebase.firestore.FieldValue.serverTimestamp();
+const INC=n=>firebase.firestore.FieldValue.increment(n);
+const msgTime=m=>(m&&m.at&&m.at.toMillis)?m.at.toMillis():((m&&(m.clientAt||m.at))||Date.now());
+let chatMsgUnsub=null, chatMsgs=[];
+function stopChatMsgs(){ if(chatMsgUnsub){try{chatMsgUnsub();}catch(e){}chatMsgUnsub=null;} chatMsgs=[]; }
+function subscribeChatMsgs(cid,w){
+  stopChatMsgs(); if(!msgsCol(cid))return;
+  chatMsgUnsub=msgsCol(cid).orderBy("at").limitToLast(300).onSnapshot(snap=>{
+    chatMsgs=snap.docs.map(d=>d.data());
+    if($("#chat-thread").classList.contains("on")){
+      const b=$("#ctBody");
+      if(b){ b.innerHTML=chatMsgs.length?chatMsgs.map(m=>bubble(m)).join(""):`<div class="wa-note">זו תחילת השיחה עם ${esc((w&&w.name)||"המטפל/ת")}. אפשר גם לפתוח וואטסאפ בכפתור שלמעלה.</div>`; b.scrollTop=b.scrollHeight; }
+    }
+  },e=>console.warn("msgs sub",e));
+}
 const connFor=cgId=>famConns.find(c=>c.cgId===cgId);
 /* coordinator approval gate — off unless CRM turns it on in hibur_config/settings.
    Starts fail-closed (nothing counts as matched) until the real setting has actually
@@ -961,14 +983,14 @@ function renderMatches(){const tab=$("#tab");tab.className="tab pad";
 }
 /* ---------- CHATS list ---------- */
 function renderChats(){const tab=$("#tab");tab.className="tab pad";
-  const cs=famConns.filter(c=>isMatched(c)&&(c.msgs||[]).length).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  const cs=famConns.filter(c=>isMatched(c)&&(c.lastText||c.msgCount)).sort((a,b)=>(b.lastAt||b.updatedAt||0)-(a.lastAt||a.updatedAt||0));
   if(!cs.length){tab.innerHTML=emptyState(I.chat,"אין שיחות עדיין","התחל/י שיחה מתוך מאצ' — וההתכתבות גם תישלח לוואטסאפ של המטפל/ת");return;}
   tab.innerHTML=`<div class="list-head">שיחות</div>`+
-    cs.map(c=>{const w=cgById(c.cgId)||c.cg||{name:"מטפל/ת"};const lm=last(c.msgs);const unread=(c.msgs||[]).filter(m=>m.from==="cg"&&m.at>(readAt[c._id]||0)).length;
+    cs.map(c=>{const w=cgById(c.cgId)||c.cg||{name:"מטפל/ת"};const unread=c.lastFrom==="cg"&&(c.lastAt||0)>(readAt[c._id]||0);
       return `<div class="list-row" onclick="openChat('${c.cgId}')">
         ${avEl(w)}
-        <div class="m"><b>${esc(w.name)} ${esc(w.lastName||"")}</b><span>${esc(lm?lm.text:"")}</span></div>
-        <div class="side"><div class="time">${lm?timeStr(lm.at):""}</div>${unread?`<span class="badge-match" style="margin-top:5px;display:inline-block">${unread}</span>`:""}</div>
+        <div class="m"><b>${esc(w.name)} ${esc(w.lastName||"")}</b><span>${esc(c.lastText||"")}</span></div>
+        <div class="side"><div class="time">${c.lastAt?timeStr(c.lastAt):""}</div>${unread?`<span class="badge-match" style="margin-top:5px;display:inline-block">●</span>`:""}</div>
       </div>`;
     }).join("");
 }
@@ -985,10 +1007,11 @@ function emptyState(icon,h,p){return `<div class="empty" style="position:static;
 /* ---------- CHAT THREAD ---------- */
 function openChat(cgId){chatId=cgId;const c=connFor(cgId);if(c)readAt[c._id]=now();
   const w=cgById(cgId)||(c&&c.cg)||{name:"מטפל/ת"};
+  if(c)subscribeChatMsgs(c._id,w);
   renderChatThread(w);go("chat-thread");renderNav();
 }
 function renderChatThread(w){
-  const c=connFor(w.id)||connFor(chatId);const msgs=(c&&c.msgs)||[];
+  const c=connFor(w.id)||connFor(chatId);const msgs=chatMsgs;
   const phone=(c&&c.cg&&c.cg.phone)||w.phone;
   $("#chat-thread").innerHTML=`
     <div class="ct-head">
@@ -1013,7 +1036,7 @@ function bubble(m){
   const secondary=mine?m.translated:(m.translated?m.text:null);
   return `<div class="bub ${mine?"me":"them"}">${esc(primary)}
     ${secondary?`<div style="opacity:.7;font-size:11.5px;margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,.2)">🌐 ${esc(secondary)}</div>`:""}
-    <time>${timeStr(m.at)}</time></div>`;
+    <time>${timeStr(msgTime(m))}</time></div>`;
 }
 function guessNonHebrewLang(w){
   const langs=(w&&w.languages||"").split(/[,،]+/).map(s=>s.trim()).filter(Boolean);
@@ -1027,15 +1050,16 @@ async function sendMsg(){
   if(!isMatched(c)){toast("ההתאמה כבר לא פעילה","err");go("main");switchTab("chats");return;}
   inp.value="";
   const w=cgById(chatId)||c.cg||{name:"מטפל/ת"};
-  const msg={from:"fam",text:t,at:now()};
+  const msg={from:"fam",text:t,clientAt:now()};
   const targetLang=guessNonHebrewLang(w);
   if(targetLang){const tr=await translateMsg(t,targetLang);if(tr){msg.translated=tr;msg.translatedLang=targetLang;}}
-  // Await the write and reflect real success/failure instead of optimistically showing the
-  // message as sent even when Firestore rejected it (e.g. approval revoked mid-thread).
-  try{ await connCol().doc(c._id).set({msgs:AU(msg),updatedAt:now()},{merge:true}); }
-  catch(e){ console.warn(e); toast("ההודעה לא נשלחה — נסו שוב","err"); inp.value=t; return; }
-  c.msgs=(c.msgs||[]).concat(msg); readAt[c._id]=now();
-  renderChatThread(w);
+  // Write the message to the subcollection (server-timestamped) and bump the parent summary.
+  // The open-chat listener re-renders from the subcollection, so no optimistic local append.
+  try{
+    await msgsCol(c._id).add(Object.assign({},msg,{at:SVT()}));
+    await connCol().doc(c._id).set({lastText:t,lastFrom:"fam",lastAt:now(),msgCount:INC(1),updatedAt:now()},{merge:true});
+    readAt[c._id]=now();
+  }catch(e){ console.warn(e); toast("ההודעה לא נשלחה — נסו שוב","err"); inp.value=t; return; }
   const waPhone=(c.cg&&c.cg.phone)||w.phone; if(waPhone)bridgeToWhatsapp(waPhone,msg.translated||t,c._id);
 }
 
