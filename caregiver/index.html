@@ -126,6 +126,7 @@ img{display:block;max-width:100%}
     <p>היכנס/י עם מספר תעודת זהות או דרכון — וראה/י אילו משפחות מעוניינות בך.</p>
     <div class="login-box">
       <div class="field"><input id="li-id" inputmode="text" placeholder="ת״ז / מספר דרכון"></div>
+      <div class="field"><input id="li-phone" inputmode="tel" dir="ltr" style="text-align:right" placeholder="טלפון (וואטסאפ) — לאימות בהרשמה"></div>
       <label id="consentRow" style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:rgba(255,255,255,.85);margin:6px 0 12px;cursor:pointer">
         <input type="checkbox" id="li-consent" style="width:18px;height:18px;flex-shrink:0;margin-top:1px;accent-color:var(--sand)">
         <span>קראתי ואני מסכים/ה ל<a href="javascript:void(0)" onclick="showPrivacyModal()" style="color:var(--sand);text-decoration:underline">מדיניות הפרטיות</a></span>
@@ -307,22 +308,73 @@ function go(id){$$(".screen").forEach(s=>s.classList.remove("on"));const el=$("#
 
 /* ---------- login ---------- */
 const AUTH_CAREGIVER_URL="https://hibur-wa-bridge.netlify.app/.netlify/functions/auth-caregiver";
+// ---- WhatsApp signup phone-verification (2FA). Only new caregivers hit it, and only when the
+// bridge has Meta creds (auth-caregiver returns phone-not-verified); otherwise login is unchanged. ----
+async function otpPost(path,body){
+  try{const r=await fetch(WA_BRIDGE_URL+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});return await r.json();}
+  catch(e){return {error:"network"};}
+}
+const OTP_MSG={ "rate-limited":"יותר מדי בקשות קוד. נסו שוב בעוד כמה דקות.","too-soon":"רגע לפני שליחה חוזרת…","invalid-phone":"מספר הטלפון אינו תקין.","wrong-code":"קוד שגוי. נסו שוב.","expired":"הקוד פג תוקף — שלחו קוד חדש.","too-many-attempts":"יותר מדי ניסיונות — שלחו קוד חדש.","no-code":"לא נמצא קוד — שלחו קוד חדש.","network":"שגיאת רשת — נסו שוב.","server-error":"שגיאה — נסו שוב." };
+// Resolves "ok" (verified) or "cancel". Assumes the bridge is live (only called after the server
+// asked for verification), so it always shows the code entry.
+function verifyPhoneOTP(phone){
+  return new Promise(async resolve=>{
+    const start=await otpPost("/auth-otp-start",{phone,lang:"he"});
+    if(start.error){toast(OTP_MSG[start.error]||"שגיאה","err");return resolve("cancel");}
+    const ov=document.createElement("div");
+    ov.style.cssText="position:fixed;inset:0;z-index:400;background:rgba(11,20,26,.72);display:flex;align-items:center;justify-content:center;padding:20px";
+    ov.innerHTML=`<div style="background:var(--card,#fff);border-radius:18px;max-width:360px;width:100%;padding:24px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.35)">
+      <div style="font-size:34px">📱</div>
+      <h2 style="margin:8px 0 4px;font-size:19px">אימות בוואטסאפ</h2>
+      <p style="color:var(--ink-3,#667);font-size:13.5px;margin:0 0 16px">שלחנו קוד בן 6 ספרות לוואטסאפ שלך<br><b dir="ltr">${esc(phone)}</b></p>
+      <input id="otpCode" inputmode="numeric" maxlength="6" placeholder="••••••" dir="ltr" style="width:100%;box-sizing:border-box;font-size:26px;letter-spacing:8px;text-align:center;padding:12px;border:1.5px solid var(--line,#dce3e8);border-radius:12px;margin-bottom:6px">
+      <div id="otpErr" style="color:var(--danger,#e5484d);font-size:12.5px;min-height:16px;margin-bottom:10px"></div>
+      <button id="otpVerify" style="width:100%;padding:13px;border:none;border-radius:12px;background:var(--anchor,#0a6);color:#fff;font-size:15px;font-weight:700;cursor:pointer">אישור</button>
+      <div style="display:flex;justify-content:space-between;margin-top:14px;font-size:12.5px">
+        <button id="otpResend" style="background:none;border:none;color:var(--anchor,#0a6);cursor:pointer">שליחה חוזרת</button>
+        <button id="otpCancel" style="background:none;border:none;color:var(--ink-3,#667);cursor:pointer">ביטול</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+    const inp=ov.querySelector("#otpCode"),err=ov.querySelector("#otpErr"),btn=ov.querySelector("#otpVerify");
+    inp.focus();
+    const close=v=>{ov.remove();resolve(v);};
+    const doVerify=async()=>{
+      const code=inp.value.replace(/\D/g,"");
+      if(code.length!==6){err.textContent="הזינו 6 ספרות";return;}
+      btn.disabled=true;err.textContent="";
+      const res=await otpPost("/auth-otp-verify",{phone,code});
+      btn.disabled=false;
+      if(res.ok)return close("ok");
+      err.textContent=OTP_MSG[res.error]||"קוד שגוי";inp.select();
+    };
+    btn.onclick=doVerify;
+    inp.onkeydown=e=>{if(e.key==="Enter")doVerify();};
+    ov.querySelector("#otpResend").onclick=async()=>{err.textContent="";const r=await otpPost("/auth-otp-start",{phone,lang:"he"});err.style.color=r.error?"var(--danger,#e5484d)":"var(--ink-3,#667)";err.textContent=r.error?(OTP_MSG[r.error]||"שגיאה"):"קוד חדש נשלח ✓";};
+    ov.querySelector("#otpCancel").onclick=()=>close("cancel");
+  });
+}
 async function doLogin(){
   const id=$("#li-id").value.trim().replace(/\s/g,"");
   if(id.length<4){toast("הזינו ת״ז או דרכון");return;}
   if(!$("#li-consent").checked){toast("יש לאשר את מדיניות הפרטיות כדי להמשיך");return;}
   localStorage.setItem("hbcg_consent","1");
   if(!fdb){toast("אין חיבור לרשת");return;}
+  const phone=$("#li-phone").value.trim();
   toast("מתחבר…");
-  let auth; try{
-    const r=await fetch(AUTH_CAREGIVER_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id})});
-    auth=await r.json();
-    if(auth.token) await firebase.auth().signInWithCustomToken(auth.token);
-  }catch(e){toast("שגיאת רשת — נסו שוב");console.warn(e);return;}
+  const authCg=async()=>{const r=await fetch(AUTH_CAREGIVER_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,phone})});return r.json();};
+  let auth; try{ auth=await authCg(); }catch(e){toast("שגיאת רשת — נסו שוב");console.warn(e);return;}
+  if(auth.error==="phone-not-verified"){
+    // New caregiver + WhatsApp live → verify the phone once, then retry (server consumes the marker).
+    if(phone.replace(/\D/g,"").length<9){toast("הזינו מספר טלפון (וואטסאפ) לאימות");return;}
+    const otp=await verifyPhoneOTP(phone);
+    if(otp==="cancel")return;
+    try{ auth=await authCg(); }catch(e){toast("שגיאת רשת — נסו שוב");console.warn(e);return;}
+  }
   if(!auth.token){toast("שגיאה — נסו שוב");return;}
+  try{ await firebase.auth().signInWithCustomToken(auth.token); }catch(e){toast("שגיאה — נסו שוב");console.warn(e);return;}
   let d=null; try{const s=await cgDoc(id).get();d=s.exists?s.data():null;}catch(e){console.warn(e);}
   if(!d){ d={id,name:"",nationality:"",gender:"female",age:"",city:"",languages:"עברית",experience:"",expectedSalary:5800,
-    canHoist:"yes",canDiapers:"yes",knowsDementia:"no",status:"זמין",photo:"",video:"",phone:"",email:"",createdAt:nowT()};
+    canHoist:"yes",canDiapers:"yes",knowsDementia:"no",status:"זמין",photo:"",video:"",phone:phone||"",phoneNorm:normalizePhone(phone||""),email:"",createdAt:nowT()};
     try{await cgDoc(id).set(d);}catch(e){} }
   me=d; localStorage.setItem(SESS,id); enterApp();
 }

@@ -522,11 +522,57 @@ async function aiFillSignup(){
   }catch(e){toast("שגיאה — נסו למלא ידנית");console.warn(e);}
 }
 const AUTH_FAMILY_URL="https://hibur-wa-bridge.netlify.app/.netlify/functions/auth-family";
-async function signInFamily(id,name,mode){
-  const r=await fetch(AUTH_FAMILY_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,name,mode})});
+async function signInFamily(id,name,mode,phone){
+  const r=await fetch(AUTH_FAMILY_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,name,mode,phone})});
   const data=await r.json();
   if(data.token) await firebase.auth().signInWithCustomToken(data.token);
   return data;
+}
+// ---- WhatsApp signup phone-verification (2FA). No-op unless the bridge has Meta creds set:
+// auth-otp-start then returns otpRequired:false and signup proceeds exactly as before. ----
+const WA_BRIDGE_BASE="https://hibur-wa-bridge.netlify.app/.netlify/functions";
+async function otpPost(path,body){
+  try{const r=await fetch(WA_BRIDGE_BASE+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});return await r.json();}
+  catch(e){return {error:"network"};}
+}
+const OTP_MSG={ "rate-limited":"יותר מדי בקשות קוד. נסו שוב בעוד כמה דקות.","too-soon":"רגע לפני שליחה חוזרת…","invalid-phone":"מספר הטלפון אינו תקין.","wrong-code":"קוד שגוי. נסו שוב.","expired":"הקוד פג תוקף — שלחו קוד חדש.","too-many-attempts":"יותר מדי ניסיונות — שלחו קוד חדש.","no-code":"לא נמצא קוד — שלחו קוד חדש.","network":"שגיאת רשת — נסו שוב.","server-error":"שגיאה — נסו שוב." };
+// Resolves "ok" (phone verified), "skip" (bridge off, no OTP needed), or "cancel".
+function verifyPhoneOTP(phone){
+  return new Promise(async resolve=>{
+    const start=await otpPost("/auth-otp-start",{phone,lang:"he"});
+    if(start.error){toast(OTP_MSG[start.error]||"שגיאה","err");return resolve("cancel");}
+    if(!start.otpRequired)return resolve("skip");
+    const ov=document.createElement("div");
+    ov.style.cssText="position:fixed;inset:0;z-index:400;background:rgba(11,20,26,.72);display:flex;align-items:center;justify-content:center;padding:20px";
+    ov.innerHTML=`<div style="background:var(--card,#fff);border-radius:18px;max-width:360px;width:100%;padding:24px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.35)">
+      <div style="font-size:34px">📱</div>
+      <h2 style="margin:8px 0 4px;font-size:19px">אימות בוואטסאפ</h2>
+      <p style="color:var(--ink-3,#667);font-size:13.5px;margin:0 0 16px">שלחנו קוד בן 6 ספרות לוואטסאפ שלך<br><b dir="ltr">${esc(phone)}</b></p>
+      <input id="otpCode" inputmode="numeric" maxlength="6" placeholder="••••••" dir="ltr" style="width:100%;box-sizing:border-box;font-size:26px;letter-spacing:8px;text-align:center;padding:12px;border:1.5px solid var(--line,#dce3e8);border-radius:12px;margin-bottom:6px">
+      <div id="otpErr" style="color:var(--danger,#e5484d);font-size:12.5px;min-height:16px;margin-bottom:10px"></div>
+      <button id="otpVerify" class="btn primary" style="width:100%;padding:13px;border:none;border-radius:12px;background:var(--anchor,#0a6);color:#fff;font-size:15px;font-weight:700;cursor:pointer">אישור</button>
+      <div style="display:flex;justify-content:space-between;margin-top:14px;font-size:12.5px">
+        <button id="otpResend" style="background:none;border:none;color:var(--anchor,#0a6);cursor:pointer">שליחה חוזרת</button>
+        <button id="otpCancel" style="background:none;border:none;color:var(--ink-3,#667);cursor:pointer">ביטול</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+    const inp=ov.querySelector("#otpCode"),err=ov.querySelector("#otpErr"),btn=ov.querySelector("#otpVerify");
+    inp.focus();
+    const close=v=>{ov.remove();resolve(v);};
+    const doVerify=async()=>{
+      const code=inp.value.replace(/\D/g,"");
+      if(code.length!==6){err.textContent="הזינו 6 ספרות";return;}
+      btn.disabled=true;err.textContent="";
+      const res=await otpPost("/auth-otp-verify",{phone,code});
+      btn.disabled=false;
+      if(res.ok)return close("ok");
+      err.textContent=OTP_MSG[res.error]||"קוד שגוי";inp.select();
+    };
+    btn.onclick=doVerify;
+    inp.onkeydown=e=>{if(e.key==="Enter")doVerify();};
+    ov.querySelector("#otpResend").onclick=async()=>{err.textContent="";const r=await otpPost("/auth-otp-start",{phone,lang:"he"});err.style.color=r.error?"var(--danger,#e5484d)":"var(--ink-3,#667)";err.textContent=r.error?(OTP_MSG[r.error]||"שגיאה"):"קוד חדש נשלח ✓";};
+    ov.querySelector("#otpCancel").onclick=()=>close("cancel");
+  });
 }
 async function doSignup(){
   const name=$("#su-name").value.trim(), id=$("#su-id").value.replace(/\D/g,"");
@@ -534,9 +580,15 @@ async function doSignup(){
   if(id.length<5){toast("הזינו תעודת זהות תקינה");return;}
   if(!$("#su-city").value){toast("בחרו עיר");return;}
   if(!$("#su-consent").checked){toast("יש לאשר את מדיניות הפרטיות כדי להמשיך");return;}
+  const phone=$("#su-phone").value.trim();
+  if(phone.replace(/\D/g,"").length<9){toast("הזינו מספר טלפון תקין");return;}
+  // WhatsApp phone-verification before the account is created (no-op if the bridge isn't live).
+  const otp=await verifyPhoneOTP(phone);
+  if(otp==="cancel")return; // user backed out, or an error was already shown
   toast("בודק/ת…");
-  let auth; try{ auth=await signInFamily(id,name,"signup"); }catch(e){toast("שגיאת רשת — נסו שוב");console.warn(e);return;}
+  let auth; try{ auth=await signInFamily(id,name,"signup",phone); }catch(e){toast("שגיאת רשת — נסו שוב");console.warn(e);return;}
   if(auth.error==="name-mismatch"){toast("קיים כבר חשבון אחר עם ת\"ז זו");return;}
+  if(auth.error==="phone-not-verified"){toast("צריך לאמת את הטלפון כדי להירשם","err");return;}
   if(!auth.token){toast("שגיאה — נסו שוב");return;}
   if(!auth.isNew){
     // account already existed with a matching name — sign them in rather than overwrite it
