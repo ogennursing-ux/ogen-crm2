@@ -1625,7 +1625,7 @@ async function loadHiburDigest(){
     const newCgs=cgs.filter(c=>(c.createdAt||0)>=cutoff);
     const matchesToday=conns.filter(c=>c.famLiked&&c.cgLiked&&(c.updatedAt||0)>=cutoff);
     const allMatches=conns.filter(c=>c.famLiked&&c.cgLiked);
-    const pending=conns.filter(c=>c.famLiked&&!c.cgLiked);
+    const pending=conns.filter(c=>c.famLiked&&c.cgLiked==null); // ==null: not yet answered (was !cgLiked, which also counted actively-declined requests)
     // Chat messages moved to a per-conn messages/ subcollection; the parent keeps a lightweight
     // summary. Count chats that had a message today from lastAt (millis) — cheap, no per-message
     // fan-out read on the dashboard.
@@ -2395,6 +2395,7 @@ function ivBotSay(text,cb){ivTyping(true);$("#ivStatus").textContent="מקליד
   setTimeout(()=>{ivTyping(false);$("#ivStatus").textContent="מקוונת";ivBubble("assistant",text);if(cb)cb();},700+Math.random()*500);}
 function ivSubmit(){
   const inp=$("#ivInput");const val=inp.value.trim();if(!val||ivState.idx<0)return;
+  if(ivState.busy)return; // an AI reply is still in flight — drop double-submits so turns can't interleave or arrive out of order
   inp.value="";ivBubble("user",val);
   if(ivState.mode==="ai"){ivSubmitAI();return;}
   const cur=IV_QUESTIONS[ivState.idx];
@@ -2409,7 +2410,7 @@ function ivSubmit(){
   ivBotSay(ack+nextQ);
 }
 async function ivSubmitAI(){
-  ivTyping(true);$("#ivStatus").textContent="מקלידה…";
+  ivState.busy=true; ivTyping(true);$("#ivStatus").textContent="מקלידה…";
   let reply;
   try{ reply=await callInterviewAI(ivState.messages,ivState.system,ivState.lang); }
   catch(e){ // graceful fallback → scripted question — keep whatever the candidate just typed instead of discarding it
@@ -2418,7 +2419,7 @@ async function ivSubmitAI(){
     const curQ=IV_QUESTIONS[ivState.idx];
     if(lastUser&&curQ&&!(curQ.key in ivState.answers))ivState.answers[curQ.key]=lastUser.content;
     ivState.idx=Math.min(Object.keys(ivState.answers).length,IV_QUESTIONS.length-1);
-    ivBubble("assistant",IV_QUESTIONS[ivState.idx].q[ivState.code]||IV_QUESTIONS[ivState.idx].q.en); return; }
+    ivBubble("assistant",IV_QUESTIONS[ivState.idx].q[ivState.code]||IV_QUESTIONS[ivState.idx].q.en); ivState.busy=false; return; }
   ivTyping(false);$("#ivStatus").textContent="מקוונת";
   const done=/\[DONE\]/i.test(reply);
   const shown=reply.replace(/\[DONE\][\s\S]*$/i,"").trim();
@@ -2427,7 +2428,14 @@ async function ivSubmitAI(){
     const m=reply.match(/\{[\s\S]*\}/);
     if(m){try{ivState.answers=Object.assign({},ivState.answers,JSON.parse(m[0]));}catch(e){}}
     finishInterview();
+  }else{
+    // Resilient partial save in the AI path too (the scripted path saves after 3 & 6 answers).
+    // buildWorkerFromInterview(true) captures the full transcript, so a candidate who drops off
+    // mid-AI-interview still leaves a partial record — previously only the scripted path saved.
+    const turns=ivState.messages.filter(m=>m.role==="user").length;
+    if(turns===3||turns===6)partialSaveInterview();
   }
+  ivState.busy=false;
 }
 function partialSaveInterview(){
   // save/update a partial worker so a dropped candidate isn't lost

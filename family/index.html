@@ -463,12 +463,13 @@ const userDoc=id=>fdb?fdb.collection("hibur").doc(String(id)):null; // separate 
 // Stored as phoneNorm so the WhatsApp bridge can find the owner with an indexed equality
 // query instead of scanning (and capping at) 300 docs.
 const normalizePhone=p=>{let d=String(p||"").replace(/\D/g,"");if(d.startsWith("0"))d="972"+d.slice(1);return d;};
+const cloudPayload=()=>{const p=JSON.parse(JSON.stringify(me));p.phoneNorm=normalizePhone(p.phone);return p;};
 function pushCloud(){if(!fdb||!me||applyingCloud)return;clearTimeout(cloudTimer);
-  cloudTimer=setTimeout(()=>{try{
-    const payload=JSON.parse(JSON.stringify(me));
-    payload.phoneNorm=normalizePhone(payload.phone);
-    userDoc(me.id).set(payload).catch(e=>console.warn("cloud push",e));
-  }catch(e){}},500);}
+  cloudTimer=setTimeout(()=>{try{userDoc(me.id).set(cloudPayload()).catch(e=>console.warn("cloud push",e));}catch(e){}},500);}
+// Immediate, awaitable write. logout() awaits this so a profile change made in the last 500ms —
+// still sitting in the debounce timer — isn't discarded when the timer is cleared on the way out.
+function flushCloud(){if(!fdb||!me)return Promise.resolve();clearTimeout(cloudTimer);
+  try{return Promise.resolve(userDoc(me.id).set(cloudPayload())).catch(e=>console.warn("cloud flush",e));}catch(e){return Promise.resolve();}}
 async function fetchCloud(id){if(!fdb)return null;try{const s=await userDoc(id).get();return s.exists?s.data():null;}catch(e){console.warn("cloud fetch",e);return null;}}
 function subscribeCloud(){if(!fdb||!me)return;try{if(unsub)unsub();
   unsub=userDoc(me.id).onSnapshot(snap=>{if(snap.metadata.hasPendingWrites)return;const d=snap.data();if(!d)return;
@@ -540,7 +541,7 @@ async function doSignup(){
   if(!auth.isNew){
     // account already existed with a matching name — sign them in rather than overwrite it
     const existing=await fetchCloud(id);
-    if(existing){users[id]=existing;saveUsersLocal();me=existing;enterApp();return;}
+    if(existing){users[id]=existing;saveUsersLocal();me=existing;localStorage.setItem(SESS_KEY,id);enterApp();return;}
   }
   const gender=($("#su-gender .opt.sel")||{}).dataset?.v||"";
   const needs=$$("#su-needs .opt.sel").map(b=>b.dataset.need);
@@ -576,7 +577,8 @@ async function doLogin(){
   users[id]=u; saveUsersLocal();
   localStorage.setItem(SESS_KEY,id); me=u; enterApp();
 }
-function logout(){
+async function logout(){
+  await flushCloud();   // persist any pending (debounced) profile change before tearing down
   // Listeners were never torn down on logout — a stale snapshot could fire after me=null
   // (throwing inside the callback) or, on a shared device, apply the previous account's
   // data onto whoever signs in next.
@@ -594,6 +596,9 @@ function logout(){
    ============================================================ */
 const TABS=[["discover","גלה",I.discover],["likes","לייקים",I.likes],["matches","מאצ'ים",I.match],["chats","צ'אט",I.chat],["profile","פרופיל",I.user]];
 function enterApp(){
+  // readAt now lives on `me` (persisted with the profile), so read/unread survives a refresh —
+  // it used to be a bare in-memory object that reset to empty, making old messages look new.
+  readAt=me.readAt=me.readAt||{};
   caregivers=loadCaregivers();
   buildDeck();
   subscribeCloud(); subscribeFamConns(); loadHiburConfig(); retryPendingLikes();
@@ -1013,7 +1018,7 @@ function avEl(w,online){const inner=w.photo?`<img src="${esc(w.photo)}">`:esc((w
 function emptyState(icon,h,p){return `<div class="empty" style="position:static;height:100%"><div class="ic">${svg(icon,36)}</div><h3>${h}</h3><p>${p}</p></div>`;}
 
 /* ---------- CHAT THREAD ---------- */
-function openChat(cgId){chatId=cgId;const c=connFor(cgId);if(c)readAt[c._id]=now();
+function openChat(cgId){chatId=cgId;const c=connFor(cgId);if(c){readAt[c._id]=now();saveUsers();}
   const w=cgById(cgId)||(c&&c.cg)||{name:"מטפל/ת"};
   if(c)subscribeChatMsgs(c._id,w);
   renderChatThread(w);go("chat-thread");renderNav();
@@ -1061,13 +1066,15 @@ async function sendMsg(){
   const msg={from:"fam",text:t,clientAt:now()};
   const targetLang=guessNonHebrewLang(w);
   if(targetLang){const tr=await translateMsg(t,targetLang);if(tr){msg.translated=tr;msg.translatedLang=targetLang;}}
-  // Write the message to the subcollection (server-timestamped) and bump the parent summary.
-  // The open-chat listener re-renders from the subcollection, so no optimistic local append.
+  // Storing the message doc is the source of truth — only THAT gates success. If it fails we
+  // restore the text for a retry. The parent-doc summary is a denormalized cache written
+  // best-effort AFTER: a summary failure must not report "send failed" (a retry would then
+  // create a duplicate message). The summary self-corrects on the next message.
   try{
     await msgsCol(c._id).add(Object.assign({},msg,{at:SVT()}));
-    await connCol().doc(c._id).set({lastText:t,lastFrom:"fam",lastAt:now(),msgCount:INC(1),updatedAt:now()},{merge:true});
-    readAt[c._id]=now();
   }catch(e){ console.warn(e); toast("ההודעה לא נשלחה — נסו שוב","err"); inp.value=t; return; }
+  connCol().doc(c._id).set({lastText:t,lastFrom:"fam",lastAt:now(),msgCount:INC(1),updatedAt:now()},{merge:true}).catch(e=>console.warn("chat summary",e));
+  readAt[c._id]=now(); saveUsers();
   const waPhone=(c.cg&&c.cg.phone)||w.phone; if(waPhone)bridgeToWhatsapp(waPhone,msg.translated||t,c._id);
 }
 
@@ -1079,7 +1086,7 @@ function renderProfile(){const tab=$("#tab");tab.className="tab";
     <div class="p-stats">
       <div class="p-stat"><b>${me.seen.length}</b><span>נצפו</span></div>
       <div class="p-stat"><b>${me.liked.length}</b><span>לייקים</span></div>
-      <div class="p-stat"><b>${me.matches.length}</b><span>מאצ'ים</span></div>
+      <div class="p-stat"><b>${famConns.filter(isMatched).length}</b><span>מאצ'ים</span></div>
     </div>
     <div style="padding:6px 16px 20px">
       <div class="section-t">עריכת פרופיל</div>

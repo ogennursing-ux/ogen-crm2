@@ -352,7 +352,10 @@ function saveMe(){
 const TABS=[["profile","פרופיל",I.user],["requests","פניות",I.heart],["matches","מאצ'ים",I.match],["chats","צ'אט",I.chat]];
 function enterApp(){subscribeConns();loadHiburConfig();go("main");switchTab(me.name?"requests":"profile");}
 function renderNav(){
-  const pend=conns.filter(c=>c.cgId===me.id&&c.famLiked&&!c.cgLiked).length;
+  // cgLiked==null = not yet answered. !c.cgLiked also matched cgLiked===false (an actively
+  // declined request), so the badge kept counting rejected requests as still-pending — matching
+  // the requests list, which already filters on ==null.
+  const pend=conns.filter(c=>c.cgId===me.id&&c.famLiked&&c.cgLiked==null).length;
   // Unread = matched conns whose last message came from the family after we last opened it.
   // Uses only the parent-doc summary, so no message docs are loaded for the badge.
   const unread=conns.filter(isMatched).filter(c=>c.lastFrom==="fam"&&(c.lastAt||0)>((me.readAt&&me.readAt[c._id])||0)).length;
@@ -650,13 +653,15 @@ async function sendMsg(){const inp=$("#ctInput");const t=inp.value.trim();if(!t|
   const msg={from:"cg",text:t,clientAt:nowT()};
   const tr=await translateMsg(t,"Hebrew");
   if(tr){msg.translated=tr;msg.translatedLang="עברית";}
-  // Write the message to the subcollection (server-timestamped) and bump the parent summary.
-  // The open-chat listener re-renders from the subcollection, so no optimistic local append.
+  // Storing the message doc is the source of truth — only THAT gates success. If it fails we
+  // restore the text for a retry. The parent-doc summary is a denormalized cache written
+  // best-effort AFTER: a summary failure must not report "send failed" (a retry would then
+  // create a duplicate message). The summary self-corrects on the next message.
   try{
     await msgsCol(targetConn._id).add(Object.assign({},msg,{at:SVT()}));
-    await connCol().doc(targetConn._id).set({lastText:t,lastFrom:"cg",lastAt:nowT(),msgCount:INC(1),updatedAt:nowT()},{merge:true});
-    if(me.readAt){me.readAt[targetConn._id]=nowT();saveMe();}  // our own message counts as read
   }catch(e){ console.warn(e); toast("ההודעה לא נשלחה — נסו שוב","err"); inp.value=t; return; }
+  connCol().doc(targetConn._id).set({lastText:t,lastFrom:"cg",lastAt:nowT(),msgCount:INC(1),updatedAt:nowT()},{merge:true}).catch(e=>console.warn("chat summary",e));
+  me.readAt=me.readAt||{}; me.readAt[targetConn._id]=nowT(); saveMe();  // our own message counts as read
   // Use targetConn (captured before the await), NOT the global chatConn — the user may have
   // switched conversations during translation, which would have sent to the wrong number.
   const waPhone=targetConn.fam&&targetConn.fam.phone; if(waPhone)bridgeToWhatsapp(waPhone,msg.translated||t,targetConn._id);
