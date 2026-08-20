@@ -617,10 +617,14 @@ async function sendMsg(){const inp=$("#ctInput");const t=inp.value.trim();if(!t|
   const msg={from:"cg",text:t,at:nowT()};
   const tr=await translateMsg(t,"Hebrew");
   if(tr){msg.translated=tr;msg.translatedLang="עברית";}
-  connCol().doc(targetConn._id).set({msgs:AU(msg),updatedAt:nowT()},{merge:true}).catch(e=>console.warn(e));
+  // Await the write and reflect real success/failure instead of assuming it sent.
+  try{ await connCol().doc(targetConn._id).set({msgs:AU(msg),updatedAt:nowT()},{merge:true}); }
+  catch(e){ console.warn(e); toast("ההודעה לא נשלחה — נסו שוב","err"); inp.value=t; return; }
   targetConn.msgs=(targetConn.msgs||[]).concat(msg);
   if(chatConn===targetConn)renderChat(chatConn);
-  const waPhone=chatConn.fam&&chatConn.fam.phone; if(waPhone)bridgeToWhatsapp(waPhone,msg.translated||t,chatConn._id);
+  // Use targetConn (captured before the await), NOT the global chatConn — the user may have
+  // switched conversations during translation, which would have sent to the wrong number.
+  const waPhone=targetConn.fam&&targetConn.fam.phone; if(waPhone)bridgeToWhatsapp(waPhone,msg.translated||t,targetConn._id);
 }
 
 /* ---------- boot ---------- */

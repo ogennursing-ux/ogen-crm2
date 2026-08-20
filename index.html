@@ -1966,8 +1966,6 @@ function renderReports(v){
    SETTINGS
    ============================================================ */
 function renderSettings(v){
-  const gkey=localStorage.getItem("geminiApiKey")||"";
-  const gkey2=localStorage.getItem("geminiApiKey2")||"";
   const syncedOn=syncEnabled();
   const del=deletedItems();
   v.innerHTML=`
@@ -2017,12 +2015,8 @@ function renderSettings(v){
     <div class="panel" style="margin-bottom:16px">
       <div class="hd">${svg(I.brain,18)}<h3>חיבור AI (Google Gemini)</h3></div>
       <div class="bd" style="padding:18px">
-        <div class="field"><label>מפתח Gemini ראשי</label>
-          <input id="setGemini" value="${esc(gkey)}" placeholder="AIza..." dir="ltr" style="text-align:left" type="password"></div>
-        <div class="field" style="margin-bottom:6px"><label>מפתח Gemini גיבוי — מעבר אוטומטי אם הראשי מוצה/נחסם</label>
-          <input id="setGemini2" value="${esc(gkey2)}" placeholder="AIza... (אופציונלי)" dir="ltr" style="text-align:left" type="password"></div>
-        <p style="font-size:12.5px;color:var(--ink-3)">אם המפתח הראשי מגיע למכסה (429) או נחסם — המערכת עוברת אוטומטית למפתח הגיבוי, כך שה-AI לא נעצר.
-          ללא מפתח כלל — הראיון פועל במצב מונחה (סקריפט). המפתחות נשמרים מקומית בלבד.</p>
+        <p style="font-size:13px;color:var(--ink-3);line-height:1.6">ה-AI פעיל אוטומטית לכל מנהל/ת מחובר/ת — סיכומי לידים, ניסוח בריף וראיון "מאור".
+          המפתח מנוהל בשרת בלבד ואינו נשמר בדפדפן (כולל מעבר אוטומטי למפתח גיבוי אם הראשי מוצה).</p>
       </div>
     </div>
     <div class="panel" style="margin-bottom:16px">
@@ -2068,8 +2062,6 @@ function renderSettings(v){
       await setStaffCode(su,val); save(); e.target.value=""; toast("קוד עודכן: "+su.name,"ok");
     };
   });
-  $("#setGemini").onchange=e=>{localStorage.setItem("geminiApiKey",e.target.value.trim());toast("מפתח ראשי נשמר","ok");};
-  $("#setGemini2").onchange=e=>{localStorage.setItem("geminiApiKey2",e.target.value.trim());toast("מפתח גיבוי נשמר","ok");};
   $("#setSync").onchange=e=>{toggleSync(e.target.checked);toast(e.target.checked?"סנכרון הופעל":"סנכרון כובה","ok");};
   $("#setSyncDoc").onchange=e=>{const d=(e.target.value.trim().replace(/[^\w-]/g,""))||"v2test";localStorage.setItem("ogenSyncDoc",d);
     if(syncEnabled()){toggleSync(false);toggleSync(true);} toast("מסמך סנכרון: crm/"+d,"ok");};
@@ -2686,45 +2678,33 @@ function toggleSync(on){
 }
 
 /* ============================================================
-   GEMINI AI  (production parity) — key from settings only, no embedded secret
+   GEMINI AI — authenticated server proxy (audit P1: keys were in localStorage)
+   No Gemini key ever lives in the CRM browser now. Every AI call goes through the same
+   authenticated ai-proxy the family/caregiver apps use, signed with the staff Firebase
+   session; the key + failover live server-side. AI is available whenever a staff member
+   is signed in (no per-user key to configure).
    ============================================================ */
-const AI_MODEL="gemini-flash-latest";
-// Two keys with automatic failover: primary → backup when primary is exhausted/blocked.
-const getAIKeys=()=>["geminiApiKey","geminiApiKey2"].map(k=>(localStorage.getItem(k)||"").trim()).filter(Boolean);
-const getAIKey=()=>getAIKeys()[0]||"";            // back-compat
-const hasAI=()=>getAIKeys().length>0;
-const AI_URL=(m,key)=>"https://generativelanguage.googleapis.com/v1beta/models/"+(m||AI_MODEL)+":generateContent?key="+encodeURIComponent(key);
-const geminiText=d=>((d.candidates&&d.candidates[0]&&d.candidates[0].content&&d.candidates[0].content.parts)||[]).map(p=>p.text||"").join("");
-const AI_FAILOVER=[429,403,400,500,503];          // quota/exhausted/blocked/temporary → try next key
+const AI_PROXY_URL_GEN="https://hibur-wa-bridge.netlify.app/.netlify/functions/ai-proxy";
+const hasAI=()=>!!(window.firebase&&firebase.auth&&firebase.auth().currentUser);
 async function callAI(messages,system){
-  const keys=getAIKeys(); if(!keys.length)throw new Error("no-key");
-  let msgs=messages.slice(); while(msgs.length&&msgs[0].role==="assistant") msgs.shift(); // Gemini: contents must start with a user turn
-  const body={contents:msgs.map(m=>({role:m.role==="assistant"?"model":"user",parts:[{text:m.content}]}))};
-  if(system)body.systemInstruction={parts:[{text:system}]};
-  let lastErr=null;
-  for(let i=0;i<keys.length;i++){
-    const ctrl=new AbortController(); const to=setTimeout(()=>ctrl.abort(),60000);
-    try{
-      const r=await fetch(AI_URL(null,keys[i]),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:ctrl.signal});
-      clearTimeout(to);
-      if(r.ok) return geminiText(await r.json()).trim();
-      lastErr=new Error("AI "+r.status);
-      if(AI_FAILOVER.includes(r.status)){ if(i<keys.length-1) toast("מפתח "+(i+1)+" מוצה — מעבר למפתח גיבוי","err"); continue; } // next key
-      throw lastErr;                               // non-quota error → don't burn the backup
-    }catch(e){ clearTimeout(to); lastErr=e; }       // network/abort → try next key
-  }
-  throw lastErr||new Error("AI failed");
+  const user=firebase.auth().currentUser; if(!user)throw new Error("no-auth");
+  const idToken=await user.getIdToken();
+  const ctrl=new AbortController(); const to=setTimeout(()=>ctrl.abort(),60000);
+  try{
+    const r=await fetch(AI_PROXY_URL_GEN,{method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+idToken},
+      body:JSON.stringify({messages,system}),signal:ctrl.signal});
+    clearTimeout(to);
+    const d=await r.json();
+    if(!r.ok||d.error||typeof d.text!=="string")throw new Error("AI "+(d.error||r.status));
+    return d.text.trim();
+  }catch(e){ clearTimeout(to); throw e; }
 }
-// The interview link is opened by a candidate on their own, fresh browser (no geminiApiKey
-// in localStorage there), so it needs a server-side key — proxied through the same Netlify
-// bridge used for WhatsApp. Falls back to the direct client call when a local key IS set
-// (e.g. a coordinator previewing the interview from inside the CRM).
+// The interview always goes through the server ai-interview endpoint (system prompt owned
+// server-side, keyed by language), which works both for the anonymous candidate link (no
+// login) and for a coordinator previewing from inside the CRM — no client-side key anywhere.
 const AI_PROXY_URL="https://hibur-wa-bridge.netlify.app/.netlify/functions/ai-interview";
 async function callInterviewAI(messages,system,lang){
-  if(hasAI()) return callAI(messages,system);
-  // The server proxy now owns the interview system prompt itself (keyed by language only)
-  // instead of trusting whatever "system" text the client sent — a caller-controlled
-  // prompt on a server-key-funded endpoint was both a prompt-injection and a free-proxy risk.
   const r=await fetch(AI_PROXY_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages,lang})});
   const data=await r.json();
   if(!r.ok||data.error||!data.text) throw new Error("ai-proxy-failed");
@@ -2907,6 +2887,9 @@ function boot(){
   };
 }
 function init(){
+  // One-time cleanup: purge any Gemini keys a coordinator saved under the old client —
+  // AI is server-side now and no key should remain in the browser (audit P1).
+  localStorage.removeItem("geminiApiKey"); localStorage.removeItem("geminiApiKey2");
   load();
   const params=new URLSearchParams(location.search);
   if(params.get("mode")==="interview"){ $("#lock").classList.add("hidden"); launchInterview(); return; }

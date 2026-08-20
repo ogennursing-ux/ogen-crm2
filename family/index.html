@@ -549,7 +549,10 @@ async function doSignup(){
       hasPermit,permitExpiry:$("#su-permitExpiry").value.trim()},
     seen:[],liked:[],passed:[],matches:[],chats:{},createdAt:now()
   };
-  saveUsers(); localStorage.setItem(SESS_KEY,id); me=users[id];
+  // me must be set BEFORE saveUsers() — saveUsers() → pushCloud() writes `me`, so with the
+  // old order (saveUsers first) the brand-new account was never pushed to the cloud on
+  // signup (pushCloud's `!me` guard returned), and only appeared after the first later save.
+  me=users[id]; localStorage.setItem(SESS_KEY,id); saveUsers();
   enterApp();
 }
 async function doLogin(){
@@ -818,6 +821,10 @@ function familyLikePayload(w){
     famLiked:true,updatedAt:now()};
 }
 function familyLike(w){
+  // Demo/example caregivers (placeholder deck when no real caregivers exist yet) must never
+  // create a real hibur_conn document — that polluted the shared collection with demo_* docs
+  // no caregiver ever receives.
+  if(String(w.id||"").startsWith("demo_"))return;
   if(!connCol()){queuePendingLike(w);return;}
   connCol().doc(me.id+"__"+w.id).set(familyLikePayload(w),{merge:true})
     .catch(e=>{console.warn("like",e);queuePendingLike(w);});
@@ -833,6 +840,7 @@ async function retryPendingLikes(){
   const remaining=[];
   for(const item of list){
     if(item.famId!==me.id){remaining.push(item);continue;} // belongs to a different signed-in account
+    if(String(item.cgId||"").startsWith("demo_"))continue;  // drop any demo like queued by an older build
     try{await connCol().doc(item.famId+"__"+item.cgId).set(familyLikePayload(item.w),{merge:true});}
     catch(e){remaining.push(item);}
   }
@@ -1022,7 +1030,10 @@ async function sendMsg(){
   const msg={from:"fam",text:t,at:now()};
   const targetLang=guessNonHebrewLang(w);
   if(targetLang){const tr=await translateMsg(t,targetLang);if(tr){msg.translated=tr;msg.translatedLang=targetLang;}}
-  connCol().doc(c._id).set({msgs:AU(msg),updatedAt:now()},{merge:true}).catch(e=>console.warn(e));
+  // Await the write and reflect real success/failure instead of optimistically showing the
+  // message as sent even when Firestore rejected it (e.g. approval revoked mid-thread).
+  try{ await connCol().doc(c._id).set({msgs:AU(msg),updatedAt:now()},{merge:true}); }
+  catch(e){ console.warn(e); toast("ההודעה לא נשלחה — נסו שוב","err"); inp.value=t; return; }
   c.msgs=(c.msgs||[]).concat(msg); readAt[c._id]=now();
   renderChatThread(w);
   const waPhone=(c.cg&&c.cg.phone)||w.phone; if(waPhone)bridgeToWhatsapp(waPhone,msg.translated||t,c._id);
