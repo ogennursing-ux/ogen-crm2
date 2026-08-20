@@ -462,6 +462,11 @@ const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
 /* ---------- security helpers (spec א7) ---------- */
 const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const httpsOnly = url=>/^https:\/\//i.test(url||""); // esc() alone doesn't stop javascript:/data: URLs in an href
+// Staff login codes are salted-SHA-256 hashed — never stored/displayed in plaintext (audit P0).
+// The server (auth-staff) computes the identical hash over UTF-8 bytes of (saltHex + code).
+function randSaltHex(){ const a=new Uint8Array(16); crypto.getRandomValues(a); return [...a].map(b=>b.toString(16).padStart(2,"0")).join(""); }
+async function hashStaffCode(code,saltHex){ const buf=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(saltHex+code)); return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join(""); }
+async function setStaffCode(su,code){ const salt=randSaltHex(); su.codeSalt=salt; su.codeHash=await hashStaffCode(code,salt); delete su.code; }
 const clean = (s,max=200)=>String(s??"").replace(/<[^>]*>/g,"").replace(/javascript:/gi,"")
   .replace(/[\u0000-\u001F\u007F]/g,"").trim().slice(0,max);
 const cleanInt = (v,min,max)=>{const n=parseInt(String(v).replace(/[^\d-]/g,""),10);
@@ -534,7 +539,10 @@ function load(){
   try{const raw=localStorage.getItem(LS_KEY); if(raw){db=JSON.parse(raw);}}
   catch(e){console.warn("load failed",e);}
   for(const c of ["leads","workers","matches","staff","templates","outcomes"]) if(!Array.isArray(db[c])) db[c]=[];
-  if(!db.staff.length) db.staff=[{id:"u1",name:"דביר בנגי",role:"מנהל השמה",code:"28000494"},{id:"u4",name:"ניריה ביתן",role:"מנהל השמה",code:"55135894"},{id:"u5",name:"יעל ביתן",role:"מנהל השמה",code:"20971711"},{id:"u6",name:"יהודה ארדוט",role:"מנהל השמה",code:"25605919"}];
+  // Seed carries NO login codes — the real (hashed) codes live only in crm/main.staff
+  // server-side. This is the offline/first-run fallback for names only; a fresh install
+  // adopts the real staff (with codeHash) from the cloud once synced.
+  if(!db.staff.length) db.staff=[{id:"u1",name:"דביר בנגי",role:"מנהל השמה"},{id:"u4",name:"ניריה ביתן",role:"מנהל השמה"},{id:"u5",name:"יעל ביתן",role:"מנהל השמה"},{id:"u6",name:"יהודה ארדוט",role:"מנהל השמה"}];
   purgeOldDeleted(); // auto-clean recycle bin after 30 days (spec א7)
   sanitizeDb(db);
   computeLearning(); // build LEARNED weights from outcome history
@@ -1979,7 +1987,7 @@ function renderSettings(v){
           ${db.staff.map(u=>`<div class="urg" style="cursor:default">
             <div class="ic" style="background:${avaColor(u.name)}22;color:${avaColor(u.name)}">${esc(u.name[0]||"?")}</div>
             <div class="tx"><b>${esc(u.name)}</b><span>${esc(u.role||"רכז/ת")}</span></div>
-            <input class="staffCodeInp" data-id="${u.id}" value="${esc(u.code||"")}" placeholder="קוד כניסה אישי" style="max-width:140px;font-size:13px">
+            <input class="staffCodeInp" data-id="${u.id}" value="" type="password" inputmode="numeric" placeholder="${u.codeHash?"שנה קוד (8 ספרות)":"הגדר קוד (8 ספרות)"}" style="max-width:150px;font-size:13px">
             <button class="btn sm danger" onclick="removeStaff('${u.id}')">הסר</button>
           </div>`).join("")}
         </div>
@@ -2053,11 +2061,11 @@ function renderSettings(v){
   </div>`;
   $("#setMe").onchange=e=>{localStorage.setItem("ogenUser",e.target.value);$("#whoName").textContent=e.target.value;$("#whoAva").textContent=e.target.value[0]||"?";const su=db.staff.find(s=>s.name===e.target.value);if(su&&$("#whoRole"))$("#whoRole").textContent=su.role||"מנהל השמה";toast("מחובר/ת כ-"+e.target.value,"ok");};
   document.querySelectorAll(".staffCodeInp").forEach(inp=>{
-    inp.onchange=e=>{
+    inp.onchange=async e=>{
       const id=e.target.dataset.id, val=clean(e.target.value,40);
-      const su=db.staff.find(s=>s.id===id);
-      if(val&&db.staff.some(s=>s.id!==id&&s.code===val)){toast("קוד כבר בשימוש","err"); e.target.value=(su&&su.code)||""; return;}
-      if(su){su.code=val||undefined; save(); toast("קוד עודכן: "+su.name,"ok");}
+      const su=db.staff.find(s=>s.id===id); if(!su||!val)return;      // empty = leave the existing code
+      if(!/^\d{8}$/.test(val)){toast("הקוד חייב להיות 8 ספרות","err"); e.target.value=""; return;}
+      await setStaffCode(su,val); save(); e.target.value=""; toast("קוד עודכן: "+su.name,"ok");
     };
   });
   $("#setGemini").onchange=e=>{localStorage.setItem("geminiApiKey",e.target.value.trim());toast("מפתח ראשי נשמר","ok");};
@@ -2179,7 +2187,7 @@ function importJSON(e){
       if(Array.isArray(d.templates))d.templates.forEach(t=>{t.id=uid("tpl");});
       // Staff codes are credentials — an imported backup must never silently reintroduce
       // old/leaked codes; keep everything else but drop the code field on import.
-      if(Array.isArray(d.staff))d.staff.forEach(s=>{s.id=uid("stf");delete s.code;});
+      if(Array.isArray(d.staff))d.staff.forEach(s=>{s.id=uid("stf");delete s.code;delete s.codeHash;delete s.codeSalt;});
       COLLS.forEach(c=>{if(Array.isArray(d[c]))db[c]=d[c];});
       sanitizeDb(db);save();toast("שוחזר בהצלחה (קודי צוות אופסו — יש להגדיר מחדש)","ok");render();renderNav();
     }catch(err){toast("קובץ לא תקין","err");}
@@ -2228,13 +2236,15 @@ function reseed(){
   if(!confirmDestructiveReset("טעינת נתוני דמו"))return;
   db={leads:[],workers:[],matches:[],staff:[],templates:[]};load();seed();save();toast("נתוני דמו נטענו","ok");render();renderNav();
 }
-function addStaff(){
+async function addStaff(){
   const name=clean($("#newStaffName").value,60), role=clean($("#newStaffRole").value,40)||"רכז/ת";
   const code=clean($("#newStaffCode").value,40);
   if(!name){toast("הזן/י שם","err");return;}
   if(db.staff.some(s=>s.name===name)){toast("שם כבר קיים","err");return;}
-  if(code&&db.staff.some(s=>s.code===code)){toast("קוד כבר בשימוש","err");return;}
-  db.staff.push({id:uid("u"),name,role,code:code||undefined}); save(); toast("נוסף: "+name,"ok"); render();
+  if(code&&!/^\d{8}$/.test(code)){toast("הקוד חייב להיות 8 ספרות","err");return;}
+  const su={id:uid("u"),name,role};
+  if(code) await setStaffCode(su,code);
+  db.staff.push(su); save(); toast("נוסף: "+name+(code?"":" (יש להגדיר קוד כניסה)"),"ok"); render();
 }
 function removeStaff(id){
   if(db.staff.length<=1){toast("חייב להישאר מנהל אחד לפחות","err");return;}
@@ -2633,30 +2643,41 @@ function pushCloud(){
   if(!fdoc||applyingRemote||!syncReady)return; // never write before the cloud baseline has loaded
   try{
     const fs=firebase.firestore();
-    let batch=fs.batch(), ops=0; const batches=[batch];
-    const bump=()=>{ if(++ops>=450){ batch=fs.batch(); batches.push(batch); ops=0; } };
-
-    // staff on the parent doc, merged so the legacy fallback arrays are preserved
+    // Build a flat op list, each carrying the syncHashes mutation it implies. Hashes are
+    // applied ONLY after the op's batch commits successfully — so a rejected commit leaves
+    // the entity "dirty" (hash unchanged) and the next pushCloud retries it, instead of the
+    // change being silently marked synced and lost.
+    const ops=[];
     const sh=JSON.stringify(db.staff||[]);
-    if(syncHashes["_staff"]!==sh){ batch.set(fdoc,{staff:JSON.parse(sh),_lastUpdate:now()},{merge:true}); syncHashes["_staff"]=sh; bump(); }
-
+    if(syncHashes["_staff"]!==sh) ops.push({kind:"set",ref:fdoc,data:{staff:JSON.parse(sh),_lastUpdate:now()},merge:true,key:"_staff",hash:sh});
     SYNC_COLLS.forEach(coll=>{
       const seen={};
       (db[coll]||[]).forEach(x=>{
         if(!x||x.id==null)return; seen[String(x.id)]=1;
-        const key=coll+":"+x.id, h=JSON.stringify(cleanEntity(x));
-        if(syncHashes[key]!==h){ batch.set(fdoc.collection(coll).doc(String(x.id)),cleanEntity(x)); syncHashes[key]=h; bump(); }
+        const key=coll+":"+x.id, ce=cleanEntity(x), h=JSON.stringify(ce);
+        if(syncHashes[key]!==h) ops.push({kind:"set",ref:fdoc.collection(coll).doc(String(x.id)),data:ce,key,hash:h});
       });
-      // delete anything previously synced in this collection that's gone locally
       Object.keys(syncHashes).forEach(key=>{
         if(key.indexOf(coll+":")!==0)return;
         const id=key.slice(coll.length+1);
-        if(!seen[id]){ batch.delete(fdoc.collection(coll).doc(id)); delete syncHashes[key]; bump(); }
+        if(!seen[id]) ops.push({kind:"del",ref:fdoc.collection(coll).doc(id),key,hash:null});
       });
     });
+    if(!ops.length){ setSyncStatus("connected"); return; }
 
-    if(ops===0 && batches.length===1){ setSyncStatus("connected"); return; } // nothing changed
-    Promise.all(batches.map(b=>b.commit())).then(()=>setSyncStatus("connected")).catch(e=>{setSyncStatus("error");console.warn("push",e);});
+    const CHUNK=450, commits=[];
+    for(let i=0;i<ops.length;i+=CHUNK){
+      const slice=ops.slice(i,i+CHUNK), batch=fs.batch();
+      slice.forEach(o=>{ if(o.kind==="del") batch.delete(o.ref); else if(o.merge) batch.set(o.ref,o.data,{merge:true}); else batch.set(o.ref,o.data); });
+      commits.push(batch.commit().then(()=>{
+        slice.forEach(o=>{ if(o.hash===null) delete syncHashes[o.key]; else syncHashes[o.key]=o.hash; }); // only on success
+      }));
+    }
+    Promise.allSettled(commits).then(rs=>{
+      const failed=rs.filter(r=>r.status==="rejected").length;
+      if(failed){ setSyncStatus("error"); console.warn("push: "+failed+" batch(es) failed — will retry on next save"); }
+      else setSyncStatus("connected");
+    });
   }catch(e){setSyncStatus("error");console.warn(e);}
 }
 function toggleSync(on){
