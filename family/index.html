@@ -325,6 +325,10 @@ img{display:block;max-width:100%}
 const $=(s,r=document)=>r.querySelector(s);
 const $$=(s,r=document)=>[...r.querySelectorAll(s)];
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+// Safe interpolation into an INLINE onclick JS string: JS-escape first (\, ', newlines), then
+// HTML-attribute-escape — esc() alone fails here because the HTML parser decodes &#39; back to '
+// before the handler is parsed as JS, letting a quote break out of the string.
+const jsq=s=>String(s??"").replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/[\r\n\u2028\u2029]/g," ").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
 const money=n=>n?Number(n).toLocaleString("he-IL")+" ₪":"—";
 const now=()=>Date.now();
 // crypto-random suffix instead of Date.now()+Math.random() (audit P2: predictable IDs).
@@ -473,7 +477,7 @@ function flushCloud(){if(!fdb||!me)return Promise.resolve();clearTimeout(cloudTi
 async function fetchCloud(id){if(!fdb)return null;try{const s=await userDoc(id).get();return s.exists?s.data():null;}catch(e){console.warn("cloud fetch",e);return null;}}
 function subscribeCloud(){if(!fdb||!me)return;try{if(unsub)unsub();
   unsub=userDoc(me.id).onSnapshot(snap=>{if(snap.metadata.hasPendingWrites)return;const d=snap.data();if(!d)return;
-    applyingCloud=true;me=Object.assign(me,d);users[me.id]=me;saveUsersLocal();applyingCloud=false;
+    applyingCloud=true;me=Object.assign(me,d);readAt=me.readAt=me.readAt||{};users[me.id]=me;saveUsersLocal();applyingCloud=false;
     if($("#main").classList.contains("on"))switchTab(curTab);},e=>console.warn("cloud sub",e));}catch(e){}}
 
 /* ---------- navigation ---------- */
@@ -642,6 +646,7 @@ async function logout(){
   // Listeners were never torn down on logout — a stale snapshot could fire after me=null
   // (throwing inside the callback) or, on a shared device, apply the previous account's
   // data onto whoever signs in next.
+  if(authUnsub){try{authUnsub();}catch(e){}authUnsub=null;} // stop the auth observer re-authing us after signOut
   if(unsub){try{unsub();}catch(e){}unsub=null;}
   if(connUnsub2){try{connUnsub2();}catch(e){}connUnsub2=null;}
   if(hiburConfigUnsub){try{hiburConfigUnsub();}catch(e){}hiburConfigUnsub=null;}
@@ -756,7 +761,7 @@ function deckCard(c,top){
     <div class="photo" style="background:${gradFor(w.name)}">
       ${photo}
       ${String(w.id||"").startsWith("demo_")?`<div style="position:absolute;top:12px;inset-inline-start:12px;background:rgba(0,0,0,.66);color:#fff;font-size:11px;font-weight:800;letter-spacing:.5px;padding:4px 10px;border-radius:20px;z-index:3">דוגמה</div>`:""}
-      ${w.video?`<button class="vbtn" onclick="event.stopPropagation();playVideo('${w.id}')">${svgF(I.play,20)}</button>`:""}
+      ${w.video?`<button class="vbtn" onclick="event.stopPropagation();playVideo('${jsq(w.id)}')">${svgF(I.play,20)}</button>`:""}
       <div class="avail"><span class="d"></span>פנוי/ה</div>
       <div class="pct"><b>${pct}%</b><span>התאמה</span></div>
       <div class="pdata"><h3>${esc(w.name)} ${esc(w.lastName||"")} <small>${esc(w.age||"")}</small></h3>
@@ -800,7 +805,7 @@ function decide(kind){
   setTimeout(()=>{renderDiscover();renderNav();},300);
 }
 /* ---------- shared connections (REAL two-sided matching + chat, via hibur_conn) ---------- */
-let famConns=[], connUnsub2=null, readAt={}, matchedIds=[];
+let famConns=[], connUnsub2=null, readAt={}, matchedIds=[], authUnsub=null;
 const connCol=()=>fdb?fdb.collection("hibur_conn"):null;
 const AU=x=>firebase.firestore.FieldValue.arrayUnion(x);
 // Chat messages live in a subcollection (audit P1: were one growing array inside the conn
@@ -835,7 +840,10 @@ function loadHiburConfig(){
     requireApproval=!!(snap.data()&&snap.data().requireApproval);
     hiburConfigLoaded=true;
     if($("#main").classList.contains("on"))switchTab(curTab);
-  },()=>{});
+  },e=>{ // on a read error, don't hang forever hidden — proceed fail-closed (gate ON: only approved matches show)
+    console.warn("hibur_config",e); requireApproval=true; hiburConfigLoaded=true;
+    if($("#main").classList.contains("on"))switchTab(curTab);
+  });
 }
 // Three states for c.approved: absent/null = not yet reviewed by staff, true = approved,
 // false = explicitly rejected. Gate ON requires an explicit true (unreviewed matches don't
@@ -954,7 +962,7 @@ function showMatchModal(w){
     <div class="mi" style="background:var(--like-soft)">${svgF(I.likes,34)+`<style>.mi svg{color:var(--like)}</style>`}</div>
     <h3>יש התאמה! 🎉</h3>
     <p><b>${esc(w.name)}</b> מעוניין/ת גם! אפשר להתחיל לשוחח ולתאם היכרות.</p>
-    <button class="big-btn cool" onclick="$('#modalRoot').innerHTML='';openChat('${w.id}')">שלח/י הודעה 💬</button>
+    <button class="big-btn cool" onclick="$('#modalRoot').innerHTML='';openChat('${jsq(w.id)}')">שלח/י הודעה 💬</button>
     <button class="big-btn dark" style="margin-top:9px;background:transparent;color:var(--ink-3);box-shadow:none" onclick="$('#modalRoot').innerHTML=''">אחר כך</button>
   </div></div>`;
   renderNav();
@@ -1052,7 +1060,7 @@ function renderMatches(){const tab=$("#tab");tab.className="tab pad";
   if(!ms.length){tab.innerHTML=emptyState(I.match,"אין מאצ'ים עדיין","כשמטפל/ת שאהבת מעוניין/ת גם — הוא/היא יופיעו כאן ותוכל/י לשוחח");return;}
   tab.innerHTML=`<div class="list-head">${ms.length} מאצ'ים</div><div class="list-sub">התאמה הדדית — אפשר לשוחח ולתאם היכרות.</div>`+
     ms.slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).map(c=>{const w=cgById(c.cgId)||c.cg||{name:"מטפל/ת"};
-      return rowFor(w,`onclick="openChat('${c.cgId}')"`,`<button class="big-btn cool" style="width:auto;height:38px;padding:0 16px;font-size:13px">שוחח/י 💬</button>`,true);
+      return rowFor(w,`onclick="openChat('${jsq(c.cgId)}')"`,`<button class="big-btn cool" style="width:auto;height:38px;padding:0 16px;font-size:13px">שוחח/י 💬</button>`,true);
     }).join("");
 }
 /* ---------- CHATS list ---------- */
@@ -1061,7 +1069,7 @@ function renderChats(){const tab=$("#tab");tab.className="tab pad";
   if(!cs.length){tab.innerHTML=emptyState(I.chat,"אין שיחות עדיין","התחל/י שיחה מתוך מאצ' — וההתכתבות גם תישלח לוואטסאפ של המטפל/ת");return;}
   tab.innerHTML=`<div class="list-head">שיחות</div>`+
     cs.map(c=>{const w=cgById(c.cgId)||c.cg||{name:"מטפל/ת"};const unread=c.lastFrom==="cg"&&(c.lastAt||0)>(readAt[c._id]||0);
-      return `<div class="list-row" onclick="openChat('${c.cgId}')">
+      return `<div class="list-row" onclick="openChat('${jsq(c.cgId)}')">
         ${avEl(w)}
         <div class="m"><b>${esc(w.name)} ${esc(w.lastName||"")}</b><span>${esc(c.lastText||"")}</span></div>
         <div class="side"><div class="time">${c.lastAt?timeStr(c.lastAt):""}</div>${unread?`<span class="badge-match" style="margin-top:5px;display:inline-block">●</span>`:""}</div>
@@ -1203,7 +1211,8 @@ function init(){
   // Wait for Firebase Auth's own restored session before touching Firestore —
   // reading based on the localStorage id alone (the old behavior) raced
   // onAuthStateChanged and caused intermittent permission-denied on cold reload.
-  firebase.auth().onAuthStateChanged(async user=>{
+  authUnsub=firebase.auth().onAuthStateChanged(async user=>{
+    if(!localStorage.getItem(SESS_KEY)){ go("welcome"); return; } // logged out — never silently re-auth
     if(user && user.uid==="fam_"+sid){
       if(users[sid]){me=users[sid];enterApp();return;}
       const u=await fetchCloud(sid);

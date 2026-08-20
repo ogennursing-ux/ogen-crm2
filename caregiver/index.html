@@ -154,6 +154,9 @@ img{display:block;max-width:100%}
 "use strict";
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+// Safe interpolation into an INLINE onclick JS string (esc() alone can't stop a quote break-out
+// because &#39; decodes back to ' before the handler runs). JS-escape then HTML-attribute-escape.
+const jsq=s=>String(s??"").replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/[\r\n\u2028\u2029]/g," ").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
 const money=n=>n?Number(n).toLocaleString("he-IL")+" ₪":"—";
 const nowT=()=>Date.now(), timeStr=t=>new Date(t).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
 const I={user:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
@@ -303,6 +306,7 @@ function showPrivacyModal(){
   </div></div>`;
 }
 const SESS="hbcg_session";
+let authUnsub=null; // onAuthStateChanged teardown — logout must remove it so signOut() can't re-auth
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("on");clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove("on"),2000);}
 function go(id){$$(".screen").forEach(s=>s.classList.remove("on"));const el=$("#"+id);el.classList.add("on");el.classList.add("fade");setTimeout(()=>el.classList.remove("fade"),260);}
 
@@ -362,7 +366,7 @@ function verifyPhoneOTP(phone){
   });
 }
 async function doLogin(){
-  const id=$("#li-id").value.trim().replace(/\s/g,"");
+  const id=$("#li-id").value.trim().replace(/[^\w.-]/g,""); // match the server charset so id==docId (rules) holds
   if(id.length<4){toast("הזינו ת״ז או דרכון");return;}
   if(!$("#li-consent").checked){toast("יש לאשר את מדיניות הפרטיות כדי להמשיך");return;}
   localStorage.setItem("hbcg_consent","1");
@@ -389,6 +393,7 @@ async function doLogin(){
 function logout(){
   stopChatMsgs();
   localStorage.removeItem(SESS);
+  if(authUnsub){authUnsub();authUnsub=null;} // tear down the auth observer so signOut() can't re-auth us
   if(connUnsub){connUnsub();connUnsub=null;}
   if(hiburConfigUnsub){hiburConfigUnsub();hiburConfigUnsub=null;}
   me=null;conns=[];chatConn=null;
@@ -437,7 +442,10 @@ function loadHiburConfig(){
     requireApproval=!!(snap.data()&&snap.data().requireApproval);
     hiburConfigLoaded=true;
     if($("#main").classList.contains("on"))switchTab(curTab);
-  },()=>{});
+  },e=>{ // read error → proceed fail-closed instead of hanging hidden forever
+    console.warn("hibur_config",e); requireApproval=true; hiburConfigLoaded=true;
+    if($("#main").classList.contains("on"))switchTab(curTab);
+  });
 }
 // See family/index.html for the full rationale on this 3-state (absent/true/false) model.
 const isMatched=c=>!!(c&&hiburConfigLoaded&&c.famLiked&&c.cgLiked&&(requireApproval?c.approved===true:c.approved!==false));
@@ -641,8 +649,8 @@ function renderRequests(){const tab=$("#tab");tab.className="tab pad";
         ${f.req?`<span class="chip">שפה: ${esc(f.req)}</span>`:""}
       </div></div>
       <div class="rq-act">
-        <button class="big-btn ghost" style="flex:none;width:56px" onclick="respond('${c._id}',false)">${svg(I.x,22)}</button>
-        <button class="big-btn cool" onclick="respond('${c._id}',true)">מעוניין/ת! ♥</button>
+        <button class="big-btn ghost" style="flex:none;width:56px" onclick="respond('${jsq(c._id)}',false)">${svg(I.x,22)}</button>
+        <button class="big-btn cool" onclick="respond('${jsq(c._id)}',true)">מעוניין/ת! ♥</button>
       </div></div>`;}).join("");
 }
 function respond(cid,yes){
@@ -666,13 +674,13 @@ function showMatch(famName){
 function matchedConns(){return conns.filter(isMatched);}
 function renderMatches(){const tab=$("#tab");tab.className="tab pad";const ms=matchedConns();
   if(!ms.length){tab.innerHTML=emptyState(I.match,"אין מאצ'ים עדיין","כשתשיב/י בחיוב לפנייה של משפחה — היא תופיע כאן");return;}
-  tab.innerHTML=`<div class="list-head">${ms.length} מאצ'ים</div>`+ms.map(c=>rowFam(c,`onclick="openChat('${c._id}')"`,`<button class="big-btn cool" style="width:auto;height:38px;padding:0 16px;font-size:13px">שוחח/י 💬</button>`)).join("");
+  tab.innerHTML=`<div class="list-head">${ms.length} מאצ'ים</div>`+ms.map(c=>rowFam(c,`onclick="openChat('${jsq(c._id)}')"`,`<button class="big-btn cool" style="width:auto;height:38px;padding:0 16px;font-size:13px">שוחח/י 💬</button>`)).join("");
 }
 function renderChats(){const tab=$("#tab");tab.className="tab pad";const cs=matchedConns().filter(c=>c.lastText||c.msgCount).sort((a,b)=>(b.lastAt||b.updatedAt||0)-(a.lastAt||a.updatedAt||0));
   if(!cs.length){tab.innerHTML=emptyState(I.chat,"אין שיחות עדיין","התחילו שיחה מתוך מאצ'");return;}
   tab.innerHTML=`<div class="list-head">שיחות</div>`+cs.map(c=>{
     const unread=c.lastFrom==="fam"&&(c.lastAt||0)>((me.readAt&&me.readAt[c._id])||0);
-    return `<div class="list-row" onclick="openChat('${c._id}')"><div class="av">${esc((c.fam?.name||"?")[0])}</div>
+    return `<div class="list-row" onclick="openChat('${jsq(c._id)}')"><div class="av">${esc((c.fam?.name||"?")[0])}</div>
     <div class="m"><b>${esc(c.fam?.name||"משפחה")}</b><span>${esc(c.lastText||"")}</span></div>
     <div style="text-align:center"><div style="font-size:11px;color:var(--ink-3)">${c.lastAt?timeStr(c.lastAt):""}</div>${unread?`<span class="dot" style="position:static;display:inline-block;margin-top:4px">●</span>`:""}</div></div>`;}).join("");
 }
@@ -735,7 +743,8 @@ async function init(){
   // Wait for Firebase Auth's own restored session before reading Firestore —
   // reading based on the localStorage id alone raced onAuthStateChanged and
   // caused intermittent permission-denied on cold reload.
-  firebase.auth().onAuthStateChanged(async user=>{
+  authUnsub=firebase.auth().onAuthStateChanged(async user=>{
+    if(!localStorage.getItem(SESS)){ go("welcome"); return; } // logged out — never silently re-auth
     if(!(user && user.uid==="cg_"+sid)){
       // Session didn't restore (expired/cleared) — re-authenticate silently,
       // same call doLogin() makes, before touching Firestore.

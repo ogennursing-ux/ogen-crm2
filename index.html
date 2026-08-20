@@ -461,6 +461,9 @@ const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
 
 /* ---------- security helpers (spec א7) ---------- */
 const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+// Safe interpolation into an INLINE onclick JS string (esc() alone can't stop a quote break-out:
+// &#39; decodes back to ' before the handler runs). JS-escape then HTML-attribute-escape.
+const jsq = s => String(s??"").replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/[\r\n\u2028\u2029]/g," ").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
 const httpsOnly = url=>/^https:\/\//i.test(url||""); // esc() alone doesn't stop javascript:/data: URLs in an href
 // Staff login codes are salted-SHA-256 hashed — never stored/displayed in plaintext (audit P0).
 // The server (auth-staff) computes the identical hash over UTF-8 bytes of (saltHex + code).
@@ -586,7 +589,7 @@ function seed(){
   if(db.leads.length||db.workers.length) return;
   const L=(o)=>Object.assign({id:uid("lead"),date:now(),status:"חדש",assignedTo:"דביר בנגי",source:"המלצה",sourceDetail:"",
     patientName:"",patientLastName:"",patientAge:"",gender:"",maritalStatus:"",livingSituation:"",height:"",weight:"",
-    city:"",street:"",area:"1",needsHoist:"",needsDiapers:"",hasDementia:"",needsWheelchair:"",hasPermit:"",offeredSalary:"",
+    city:"",street:"",area:"",needsHoist:"",needsDiapers:"",hasDementia:"",needsWheelchair:"",hasPermit:"",offeredSalary:"",
     requirements:"",contactName:"",contactRelation:"",contactPhone:"",followUpDate:"",temperature:"warm",starred:false,
     tags:[],notes:"",lostToCompetitor:false,competitorName:"",lostReason:"",activities:[],proposedWorkerIds:[],
     lastEditedBy:"דביר בנגי",lastEditedAt:now(),_deleted:false},o);
@@ -1065,7 +1068,7 @@ function openLead(id){
       : `<button class="btn danger sm" onclick="delItem('lead','${l.id}')">${svg(I.trash,15)}מחק</button>
          <div class="spacer"></div>
          ${hasAI()?`<button class="btn sm" onclick="aiLeadSummary('${l.id}')">${svg(I.brain,15)}סיכום AI</button>`:""}
-         ${l.contactPhone?`<button class="btn sm" onclick="sendWaQuestionnaire('family','${esc(l.contactPhone)}')">${svg(I.chat,15)}שלח שאלון בווטסאפ</button>`:""}
+         ${l.contactPhone?`<button class="btn sm" onclick="sendWaQuestionnaire('family','${jsq(l.contactPhone)}')">${svg(I.chat,15)}שלח שאלון בווטסאפ</button>`:""}
          <button class="btn" onclick="startMatch('${l.id}')">${svg(I.match,16)}מצא התאמות</button>
          <button class="btn primary" id="saveLead">${svg(I.check,16)}שמור</button>`,
     onMount
@@ -1079,7 +1082,7 @@ function openLead(id){
 }
 function newLead(){return{id:uid("lead"),date:now(),status:"חדש",assignedTo:me(),source:"המלצה",sourceDetail:"",
   patientName:"",patientLastName:"",patientAge:"",gender:"",maritalStatus:"",livingSituation:"",height:"",weight:"",
-  city:"",street:"",area:"1",needsHoist:"",needsDiapers:"",hasDementia:"",needsWheelchair:"",hasPermit:"",offeredSalary:"",
+  city:"",street:"",area:"",needsHoist:"",needsDiapers:"",hasDementia:"",needsWheelchair:"",hasPermit:"",offeredSalary:"",
   requirements:"",contactName:"",contactRelation:"",contactPhone:"",followUpDate:"",temperature:"warm",starred:false,
   tags:[],notes:"",lostToCompetitor:false,competitorName:"",lostReason:"",activities:[],proposedWorkerIds:[],placedWorkerId:"",
   lastEditedBy:me(),lastEditedAt:now(),_deleted:false};}
@@ -1102,7 +1105,7 @@ function leadForm(l){
     <div class="grid3">
       <div class="field"><label>עיר</label><input name="city" value="${esc(l.city)}" list="cityList" oninput="const a=areaForCity(this.value);const s=this.form&&this.form.elements['area'];if(a&&s)s.value=a;"></div>
       <div class="field"><label>רחוב</label><input name="street" value="${esc(l.street)}"></div>
-      <div class="field"><label>אזור <span style="font-size:10px;color:var(--ink-3)">(אוטומטי לפי העיר)</span></label><select name="area">${Object.entries(AREAS).map(([k,v])=>`<option value="${k}" ${l.area===k?"selected":""}>${k} · ${v}</option>`).join("")}</select></div>
+      <div class="field"><label>אזור <span style="font-size:10px;color:var(--ink-3)">(אוטומטי לפי העיר)</span></label><select name="area"><option value="" ${!l.area?"selected":""}>— לא ידוע (ללא סינון אזור) —</option>${Object.entries(AREAS).map(([k,v])=>`<option value="${k}" ${l.area===k?"selected":""}>${k} · ${v}</option>`).join("")}</select></div>
     </div>
     <div class="section-label">${svg(I.pin,14)} צרכי טיפול</div>
     <div class="grid3">
@@ -1251,7 +1254,7 @@ function openWorker(id){
       ?`<button class="btn ghost" onclick="closeModal()">ביטול</button><div class="spacer"></div><button class="btn primary" id="saveW">${svg(I.check,16)}צור</button>`
       :`<button class="btn danger sm" onclick="delItem('worker','${w.id}')">${svg(I.trash,15)}מחק</button><div class="spacer"></div>
         ${w.phone?`<a class="btn sm" href="https://wa.me/${w.phone.replace(/\D/g,"").replace(/^0/,"972")}" target="_blank" rel="noopener noreferrer">${svg(I.chat,15)}וואטסאפ</a>`:""}
-        ${w.phone?`<button class="btn sm" onclick="sendWaQuestionnaire('caregiver','${esc(w.phone)}')">${svg(I.chat,15)}שלח שאלון בווטסאפ</button>`:""}
+        ${w.phone?`<button class="btn sm" onclick="sendWaQuestionnaire('caregiver','${jsq(w.phone)}')">${svg(I.chat,15)}שלח שאלון בווטסאפ</button>`:""}
         <button class="btn primary" id="saveW">${svg(I.check,16)}שמור</button>`,
     onMount
   });
