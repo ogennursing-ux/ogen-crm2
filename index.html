@@ -474,7 +474,10 @@ function sanitizeDb(d){ // strip <> from every text field, on load / sync / save
   ["leads","workers","matches","staff","templates","outcomes"].forEach(c=>(d[c]||[]).forEach(scrub));
   return d;
 }
-const uid = p => p+"_"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+// Cryptographically-random suffix instead of Date.now()+Math.random() (audit P2: IDs
+// were low-entropy and predictable). Keeps the short readable prefix; falls back to the
+// old scheme only in the unlikely case crypto.randomUUID is unavailable (non-secure ctx).
+const uid = p => p+"_"+((self.crypto&&self.crypto.randomUUID)?self.crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2,10));
 const now = () => new Date().toISOString();
 const fmtDate = s => s? new Date(s).toLocaleDateString("he-IL",{day:"2-digit",month:"2-digit",year:"2-digit"}) : "—";
 const fmtDT = s => s? new Date(s).toLocaleDateString("he-IL",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}) : "—";
@@ -2520,7 +2523,7 @@ function buildWorkerFromInterview(partial){ // sanitize AI/user output (spec)
 const firebaseConfig={apiKey:"AIzaSyCzjiSwfnKDtluNzPmY7CumU34__uI9QcI",authDomain:"ogen-crm-v2.firebaseapp.com",
   projectId:"ogen-crm-v2",storageBucket:"ogen-crm-v2.firebasestorage.app",messagingSenderId:"892187312573",
   appId:"1:892187312573:web:db54fbd9bd54d2a5e7d2d4"};
-let fdoc=null, fdocUnsub=null, applyingRemote=false, syncReady=false;
+let fdoc=null, fdocUnsubs=[], applyingRemote=false, syncReady=false, parentExisted=null;
 const syncDoc=()=>localStorage.getItem("ogenSyncDoc")||"main"; // LIVE production doc (crm/main) — shared with the team
 const syncEnabled=()=>localStorage.getItem("ogenSync")!=="0"; // default ON (opt-out)
 function setSyncStatus(s){
@@ -2530,48 +2533,120 @@ function setSyncStatus(s){
   el.innerHTML=`<span style="width:8px;height:8px;border-radius:50%;background:${c};display:inline-block"></span>${txt}`;
   el.title="מסמך סנכרון: crm/"+syncDoc();
 }
-function serializableDb(){
-  // outcomes was missing here — the learning model only ever existed in this one
-  // browser's localStorage, so recommendations silently differed by device/staff member.
+/* ============================================================
+   CLOUD SYNC — one document per entity (audit Phase 3)
+   Was a single crm/{doc} blob rewritten whole on every save, so two coordinators
+   editing DIFFERENT records could erase each other (full-document last-write-wins).
+   Now each lead / worker / match / template / outcome is its own document under
+   crm/{doc}/<coll>/{id}: concurrent edits to different records never collide, and no
+   single document approaches Firestore's 1 MiB cap. `staff` stays on the parent doc
+   (small, rarely edited, and read by the server-side auth function). Writes are narrow —
+   only entities whose JSON changed since the last push are written, removed ones deleted.
+   The parent doc keeps its legacy arrays as an untouched read-only fallback for rollback.
+   ============================================================ */
+const SYNC_COLLS=["leads","workers","matches","templates","outcomes"]; // per-entity; staff is separate
+let syncHashes={};   // "coll:id" -> last-seen JSON (and "_staff") so we only write real changes
+let firstSnap={};    // which listeners have delivered their first snapshot (for seed-if-empty)
+function serializableDb(){ // still used by export/backup — full snapshot of the working set
   const c=JSON.parse(JSON.stringify({leads:db.leads,workers:db.workers,matches:db.matches,staff:db.staff,templates:db.templates,outcomes:db.outcomes||[]}));
   c.workers.forEach(w=>{delete w._ivSession;}); c._lastUpdate=now(); return c;
 }
+function persistLocal(){ try{localStorage.setItem(LS_KEY,JSON.stringify(db));}catch(e){ if(e.name==="QuotaExceededError") toast("אחסון מלא — ייצא/י גיבוי","err"); } }
+function rerenderApp(){ if($("#app") && !$("#app").classList.contains("hidden")){renderNav();render();} }
+function stopSync(){ fdocUnsubs.forEach(u=>{try{u();}catch(e){}}); fdocUnsubs=[]; }
+function cleanEntity(x){ const c=JSON.parse(JSON.stringify(x)); delete c._ivSession; return c; }
+// Reconcile a collection's remote snapshot into db[coll] by id, rather than wholesale
+// replacing the array — so a remote change to one record can't wipe an unsaved local edit
+// to a different record (or a local-only create that hasn't been pushed yet).
+function applyRemoteColl(coll, cloudArr){
+  const cloudById={}; cloudArr.forEach(x=>{ if(x&&x.id!=null) cloudById[String(x.id)]=x; });
+  const localById={}; (db[coll]||[]).forEach(x=>{ if(x&&x.id!=null) localById[String(x.id)]=x; });
+  const next=[];
+  Object.keys(cloudById).forEach(id=>{
+    const cloud=cloudById[id], local=localById[id], lastPushed=syncHashes[coll+":"+id];
+    if(local && JSON.stringify(cleanEntity(local))!==lastPushed){ next.push(local); } // unsaved local edit → keep
+    else { next.push(cloud); syncHashes[coll+":"+id]=JSON.stringify(cleanEntity(cloud)); }
+  });
+  Object.keys(localById).forEach(id=>{
+    if(cloudById[id])return;
+    if(!syncHashes[coll+":"+id]) next.push(localById[id]); // local-only create, never synced → keep
+    else delete syncHashes[coll+":"+id];                   // was synced, now gone from cloud → remote delete
+  });
+  db[coll]=next;
+}
 function initFirebase(){
-  if(fdocUnsub){fdocUnsub();fdocUnsub=null;} // stop any previous listener before attaching a new one —
-  // without this, switching sync documents left the OLD listener running forever, applying
-  // whichever doc it was originally attached to on top of whatever the new one writes.
+  stopSync(); // tear down any previous listeners before re-subscribing (e.g. on sync-doc switch)
   if(!syncEnabled()){fdoc=null;setSyncStatus("local");return;}
   if(typeof firebase==="undefined"){setSyncStatus("error");return;}
   try{
     if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     fdoc=firebase.firestore().collection("crm").doc(syncDoc());
-    syncReady=false; setSyncStatus("connecting");
-    fdocUnsub=fdoc.onSnapshot({includeMetadataChanges:true},snap=>{
-      if(snap.metadata.hasPendingWrites) return;              // ignore our own local echo
-      const data=snap.data();
-      if(data){
-        applyingRemote=true;
-        ["leads","workers","matches","staff","templates","outcomes"].forEach(c=>{if(Array.isArray(data[c]))db[c]=data[c];});
-        sanitizeDb(db);
-        try{localStorage.setItem(LS_KEY,JSON.stringify(db));}catch(e){}
-        applyingRemote=false;
-        if($("#app") && !$("#app").classList.contains("hidden")){renderNav();render();}
+    syncReady=false; firstSnap={}; syncHashes={}; parentExisted=null; setSyncStatus("connecting");
+    const need=SYNC_COLLS.length+1; let got=0;
+    // Seed (push local → cloud) only when the whole namespace is brand-new — i.e. the parent
+    // doc doesn't exist. If it exists, the cloud is authoritative for every collection,
+    // including empty ones (adopting an empty cloud collection just clears stale local data),
+    // which matches the pre-Phase-3 behavior and avoids resurrecting old local demo data.
+    const markReady=key=>{ if(!firstSnap[key]){ firstSnap[key]=1; if(++got>=need && !syncReady){
+      syncReady=true; setSyncStatus("connected"); if(parentExisted===false) pushCloud(); } } };
+
+    // parent doc → staff only (legacy blob arrays on the same doc are intentionally ignored)
+    fdocUnsubs.push(fdoc.onSnapshot({includeMetadataChanges:true},snap=>{
+      if(parentExisted===null) parentExisted=snap.exists;
+      if(!snap.metadata.hasPendingWrites){
+        const d=snap.data();
+        if(d&&Array.isArray(d.staff)){ applyingRemote=true; db.staff=d.staff; syncHashes["_staff"]=JSON.stringify(d.staff);
+          sanitizeDb(db); persistLocal(); applyingRemote=false; rerenderApp(); }
       }
-      syncReady=true; setSyncStatus("connected");             // only NOW is it safe to push (baseline loaded)
-    },err=>{setSyncStatus("error");console.warn("sync",err);});
-    fdoc.get().then(s=>{if(!s.exists){syncReady=true;pushCloud();}}).catch(()=>{}); // brand-new doc only → seed once
+      markReady("_parent");
+    },e=>{setSyncStatus("error");console.warn("sync parent",e);}));
+
+    // one listener per per-entity collection — cloud is always authoritative once loaded
+    SYNC_COLLS.forEach(coll=>{
+      fdocUnsubs.push(fdoc.collection(coll).onSnapshot({includeMetadataChanges:true},snap=>{
+        if(!snap.metadata.hasPendingWrites){
+          applyingRemote=true;
+          applyRemoteColl(coll, snap.docs.map(doc=>doc.data()));
+          sanitizeDb(db); persistLocal(); applyingRemote=false; rerenderApp();
+        }
+        markReady(coll);
+      },e=>{setSyncStatus("error");console.warn("sync "+coll,e);}));
+    });
   }catch(e){setSyncStatus("error");console.warn(e);}
 }
 function pushCloud(){
-  if(!fdoc||applyingRemote||!syncReady)return; // never write to prod before the remote baseline is loaded
-  const payload=serializableDb(); const size=JSON.stringify(payload).length;
-  if(size>950e3)toast("⚠️ בסיס הנתונים מתקרב ל-1MB — ייצא/י גיבוי","err");
-  else if(size>700e3)toast("שים לב: בסיס הנתונים מעל 700KB","err");
-  fdoc.set(payload).then(()=>setSyncStatus("connected")).catch(e=>{setSyncStatus("error");console.warn(e);});
+  if(!fdoc||applyingRemote||!syncReady)return; // never write before the cloud baseline has loaded
+  try{
+    const fs=firebase.firestore();
+    let batch=fs.batch(), ops=0; const batches=[batch];
+    const bump=()=>{ if(++ops>=450){ batch=fs.batch(); batches.push(batch); ops=0; } };
+
+    // staff on the parent doc, merged so the legacy fallback arrays are preserved
+    const sh=JSON.stringify(db.staff||[]);
+    if(syncHashes["_staff"]!==sh){ batch.set(fdoc,{staff:JSON.parse(sh),_lastUpdate:now()},{merge:true}); syncHashes["_staff"]=sh; bump(); }
+
+    SYNC_COLLS.forEach(coll=>{
+      const seen={};
+      (db[coll]||[]).forEach(x=>{
+        if(!x||x.id==null)return; seen[String(x.id)]=1;
+        const key=coll+":"+x.id, h=JSON.stringify(cleanEntity(x));
+        if(syncHashes[key]!==h){ batch.set(fdoc.collection(coll).doc(String(x.id)),cleanEntity(x)); syncHashes[key]=h; bump(); }
+      });
+      // delete anything previously synced in this collection that's gone locally
+      Object.keys(syncHashes).forEach(key=>{
+        if(key.indexOf(coll+":")!==0)return;
+        const id=key.slice(coll.length+1);
+        if(!seen[id]){ batch.delete(fdoc.collection(coll).doc(id)); delete syncHashes[key]; bump(); }
+      });
+    });
+
+    if(ops===0 && batches.length===1){ setSyncStatus("connected"); return; } // nothing changed
+    Promise.all(batches.map(b=>b.commit())).then(()=>setSyncStatus("connected")).catch(e=>{setSyncStatus("error");console.warn("push",e);});
+  }catch(e){setSyncStatus("error");console.warn(e);}
 }
 function toggleSync(on){
   localStorage.setItem("ogenSync",on?"1":"0");
-  if(on) initFirebase(); else { if(fdocUnsub){fdocUnsub();fdocUnsub=null;} fdoc=null; setSyncStatus("local"); }
+  if(on) initFirebase(); else { stopSync(); fdoc=null; setSyncStatus("local"); }
 }
 
 /* ============================================================

@@ -327,7 +327,8 @@ const $$=(s,r=document)=>[...r.querySelectorAll(s)];
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const money=n=>n?Number(n).toLocaleString("he-IL")+" ₪":"—";
 const now=()=>Date.now();
-const uid=p=>p+"_"+now().toString(36)+Math.random().toString(36).slice(2,5);
+// crypto-random suffix instead of Date.now()+Math.random() (audit P2: predictable IDs).
+const uid=p=>p+"_"+((self.crypto&&self.crypto.randomUUID)?self.crypto.randomUUID():now().toString(36)+Math.random().toString(36).slice(2,10));
 const avaColors=["#0D4F5C","#2E8CA0","#E0913A","#12A594","#5B8DEF","#8B5CF6","#E5563E","#0891B2"];
 const avaColor=s=>avaColors[[...String(s)].reduce((a,c)=>a+c.charCodeAt(0),0)%avaColors.length];
 function shade(hex,p){const n=parseInt(hex.slice(1),16);let r=(n>>16)+p,g=((n>>8)&255)+p,b=(n&255)+p;
