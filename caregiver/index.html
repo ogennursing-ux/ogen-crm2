@@ -334,12 +334,18 @@ function logout(){
   me=null;conns=[];chatConn=null;
   try{firebase.auth().signOut();}catch(e){}go("welcome");
 }
+// Must match the server's normalizePhone (_waSend.js): strip non-digits, Israeli 0→972.
+// Stored as phoneNorm so the WhatsApp bridge can find the owner with an indexed equality
+// query instead of scanning (and capping at) 300 docs.
+const normalizePhone=p=>{let d=String(p||"").replace(/\D/g,"");if(d.startsWith("0"))d="972"+d.slice(1);return d;};
 function saveMe(){
   // Was fire-and-forget — the try/catch only guarded synchronous construction of the
   // write, never the write itself, so callers always showed a success toast even when
   // Firestore rejected it. Now returns a promise callers can actually await.
   if(!fdb||!me)return Promise.resolve(false);
-  return cgDoc(me.id).set(JSON.parse(JSON.stringify(me)),{merge:true}).then(()=>true).catch(e=>{console.warn("saveMe",e);return false;});
+  const payload=JSON.parse(JSON.stringify(me));
+  payload.phoneNorm=normalizePhone(payload.phone);
+  return cgDoc(me.id).set(payload,{merge:true}).then(()=>true).catch(e=>{console.warn("saveMe",e);return false;});
 }
 
 /* ---------- app shell ---------- */

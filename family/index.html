@@ -459,8 +459,16 @@ const firebaseConfig={apiKey:"AIzaSyCzjiSwfnKDtluNzPmY7CumU34__uI9QcI",authDomai
 let fdb=null, cloudTimer=null, unsub=null, applyingCloud=false;
 function initCloud(){try{if(typeof firebase==="undefined")return;if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);fdb=firebase.firestore();}catch(e){console.warn("cloud init",e);}}
 const userDoc=id=>fdb?fdb.collection("hibur").doc(String(id)):null; // separate collection — never touches CRM's crm/main
+// Must match the server's normalizePhone (_waSend.js): strip non-digits, Israeli 0→972.
+// Stored as phoneNorm so the WhatsApp bridge can find the owner with an indexed equality
+// query instead of scanning (and capping at) 300 docs.
+const normalizePhone=p=>{let d=String(p||"").replace(/\D/g,"");if(d.startsWith("0"))d="972"+d.slice(1);return d;};
 function pushCloud(){if(!fdb||!me||applyingCloud)return;clearTimeout(cloudTimer);
-  cloudTimer=setTimeout(()=>{try{userDoc(me.id).set(JSON.parse(JSON.stringify(me))).catch(e=>console.warn("cloud push",e));}catch(e){}},500);}
+  cloudTimer=setTimeout(()=>{try{
+    const payload=JSON.parse(JSON.stringify(me));
+    payload.phoneNorm=normalizePhone(payload.phone);
+    userDoc(me.id).set(payload).catch(e=>console.warn("cloud push",e));
+  }catch(e){}},500);}
 async function fetchCloud(id){if(!fdb)return null;try{const s=await userDoc(id).get();return s.exists?s.data():null;}catch(e){console.warn("cloud fetch",e);return null;}}
 function subscribeCloud(){if(!fdb||!me)return;try{if(unsub)unsub();
   unsub=userDoc(me.id).onSnapshot(snap=>{if(snap.metadata.hasPendingWrites)return;const d=snap.data();if(!d)return;
