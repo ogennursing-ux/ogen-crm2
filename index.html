@@ -2545,8 +2545,9 @@ function setSyncStatus(s){
    The parent doc keeps its legacy arrays as an untouched read-only fallback for rollback.
    ============================================================ */
 const SYNC_COLLS=["leads","workers","matches","templates","outcomes"]; // per-entity; staff is separate
-let syncHashes={};   // "coll:id" -> last-seen JSON (and "_staff") so we only write real changes
-let firstSnap={};    // which listeners have delivered their first snapshot (for seed-if-empty)
+let syncHashes={};     // "coll:id" -> last-seen JSON (and "_staff") so we only write real changes
+let firstSnap={};      // which listeners have delivered their first snapshot (readiness gate)
+let appliedInitial={}; // which collections have applied their authoritative initial load
 function serializableDb(){ // still used by export/backup — full snapshot of the working set
   const c=JSON.parse(JSON.stringify({leads:db.leads,workers:db.workers,matches:db.matches,staff:db.staff,templates:db.templates,outcomes:db.outcomes||[]}));
   c.workers.forEach(w=>{delete w._ivSession;}); c._lastUpdate=now(); return c;
@@ -2581,7 +2582,7 @@ function initFirebase(){
   try{
     if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     fdoc=firebase.firestore().collection("crm").doc(syncDoc());
-    syncReady=false; firstSnap={}; syncHashes={}; parentExisted=null; setSyncStatus("connecting");
+    syncReady=false; firstSnap={}; appliedInitial={}; syncHashes={}; parentExisted=null; setSyncStatus("connecting");
     const need=SYNC_COLLS.length+1; let got=0;
     // Seed (push local → cloud) only when the whole namespace is brand-new — i.e. the parent
     // doc doesn't exist. If it exists, the cloud is authoritative for every collection,
@@ -2601,12 +2602,26 @@ function initFirebase(){
       markReady("_parent");
     },e=>{setSyncStatus("error");console.warn("sync parent",e);}));
 
-    // one listener per per-entity collection — cloud is always authoritative once loaded
+    // one listener per per-entity collection
     SYNC_COLLS.forEach(coll=>{
       fdocUnsubs.push(fdoc.collection(coll).onSnapshot({includeMetadataChanges:true},snap=>{
         if(!snap.metadata.hasPendingWrites){
           applyingRemote=true;
-          applyRemoteColl(coll, snap.docs.map(doc=>doc.data()));
+          const cloudArr=snap.docs.map(doc=>doc.data());
+          if(!appliedInitial[coll]){
+            // Initial load: the cloud is authoritative — adopt it wholesale and DROP any
+            // local-only entities (demo seed from init()'s seed(), or stale offline data).
+            // This matches the pre-Phase-3 behavior and stops a fresh install from pushing
+            // its demo data into a namespace that already has real records.
+            appliedInitial[coll]=1;
+            db[coll]=cloudArr;
+            Object.keys(syncHashes).forEach(k=>{ if(k.indexOf(coll+":")===0) delete syncHashes[k]; });
+            cloudArr.forEach(x=>{ if(x&&x.id!=null) syncHashes[coll+":"+x.id]=JSON.stringify(cleanEntity(x)); });
+          } else {
+            // Subsequent updates: reconcile by id so a remote change can't wipe an unsaved
+            // local edit / a local-only create made during this session.
+            applyRemoteColl(coll, cloudArr);
+          }
           sanitizeDb(db); persistLocal(); applyingRemote=false; rerenderApp();
         }
         markReady(coll);
